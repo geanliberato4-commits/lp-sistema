@@ -132,7 +132,7 @@ var raiz=document.getElementById('raiz');
 
 function desenhar(){
   if(!sb){raiz.innerHTML=telaSemConfig();return;}
-  if(!usuario){raiz.innerHTML=telaLogin();return;}
+  if(!usuario){raiz.innerHTML=estado.configurado===false?telaPrimeiroAcesso():telaLogin();return;}
   var r=rota(),titulo='Painel',corpo='',sec='painel';
   if(r==='pedidos'){titulo='Pedidos';corpo=telaPedidos();sec='pedidos';}
   else if(r==='novo-pedido'){titulo='Novo pedido';corpo=telaNovoPedido();sec='novo';}
@@ -195,6 +195,18 @@ function telaLogin(){
     '<div class="campo"><label for="lg-u">E-mail</label><input id="lg-u" name="email" type="email" autocomplete="username" required placeholder="seu@email.com"></div>'+
     '<div class="campo"><label for="lg-s">Senha</label><input id="lg-s" name="senha" type="password" autocomplete="current-password" required placeholder="Sua senha"></div>'+
     '<button class="btn cheio" type="submit">Entrar</button>'+
+  '</form><div class="rodape"><i></i>Acesso restrito aos responsáveis<i></i></div></div>';
+}
+function telaPrimeiroAcesso(){
+  return '<div class="login"><img src="'+LOGO+'" alt="LP Personalizados">'+
+  '<form class="card" data-form="primeiro" style="padding:26px 22px;gap:16px">'+
+    '<div><h1>Primeiro acesso</h1><p style="margin:4px 0 0;color:var(--sec);font-size:14px">Crie o login que vocês vão usar no sistema. Depois disso, esta tela some e só esse login entra.</p></div>'+
+    (estado.erroLogin?'<div class="erro-login" role="alert">'+esc(estado.erroLogin)+'</div>':'')+
+    '<div class="campo"><label for="pa-n">Nome que aparece no sistema</label><input id="pa-n" name="nome" required value="LP Personalizados"></div>'+
+    '<div class="campo"><label for="pa-e">E-mail</label><input id="pa-e" name="email" type="email" autocomplete="username" required placeholder="seu@email.com"></div>'+
+    '<div class="campo"><label for="pa-s">Senha (mínimo 8 caracteres)</label><input id="pa-s" name="senha" type="password" autocomplete="new-password" minlength="8" required></div>'+
+    '<div class="campo"><label for="pa-c">Repita a senha</label><input id="pa-c" name="confirma" type="password" autocomplete="new-password" minlength="8" required></div>'+
+    '<button class="btn cheio" type="submit">Criar login e entrar</button>'+
   '</form><div class="rodape"><i></i>Acesso restrito aos responsáveis<i></i></div></div>';
 }
 async function aposLogin(user){
@@ -500,6 +512,21 @@ document.addEventListener('submit',function(e){
     }).catch(function(err){estado.erroLogin=msgErro(err);desenhar();});
     return;
   }
+  if(t==='primeiro'){
+    if(f.senha.value!==f.confirma.value){estado.erroLogin='As senhas não são iguais.';desenhar();return;}
+    var bt=f.querySelector('button[type=submit]');bt.disabled=true;bt.textContent='Criando…';
+    var em=f.email.value.trim(),se=f.senha.value;
+    sb.rpc('primeiro_acesso',{p_nome:f.nome.value.trim(),p_email:em,p_senha:se}).then(function(r){
+      if(r.error)throw r.error;
+      estado.configurado=true;
+      return sb.auth.signInWithPassword({email:em,password:se});
+    }).then(function(r){
+      if(r.error)throw r.error;
+      aviso('Login criado. Bem-vindos!');
+      return aposLogin(r.data.user);
+    }).catch(function(err){estado.erroLogin=msgErro(err);desenhar();});
+    return;
+  }
   if(t==='pedido'){salvarNovoPedido(f);return;}
   var fim=function(ok){if(ok){fecharModal();desenhar();}};
   if(t==='receber'){
@@ -560,6 +587,7 @@ async function iniciar(){
     var s=r.data&&r.data.session;
     if(s&&s.user){await aposLogin(s.user);return;}
   }catch(e){}
+  try{var c=await sb.rpc('sistema_configurado');if(!c.error)estado.configurado=c.data;}catch(e){}
   desenhar();
 }
 iniciar();

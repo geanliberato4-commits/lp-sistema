@@ -8,20 +8,13 @@ Sistema interno da LP Personalizados (fase 1): pedidos, painel com alertas, caix
 - **Dados e login:** ficam no Supabase. As duas responsáveis veem os mesmos dados, no celular e no computador.
 - **Segurança:** só usuários cadastrados na tabela `membros` conseguem ver ou mudar os dados. A chave em `config.js` é pública e pode ficar no site.
 
-## Montagem (uma vez só)
+## Montagem
 
-1. **Banco de dados:** rodar os arquivos da pasta `supabase` em ordem (01 e depois 02) no projeto do Supabase (SQL Editor → colar → Run).
-2. **Fechar o cadastro público:** em Authentication → Sign In / Providers, desligar "Allow new users to sign up".
-3. **Criar as duas usuárias:** em Authentication → Users → Add user → Create new user, com e-mail e senha, marcando "Auto Confirm User".
-4. **Liberar o acesso das duas:** no SQL Editor, trocando os e-mails e nomes:
-   ```sql
-   insert into public.membros (user_id, nome)
-   select id, 'Nome 1' from auth.users where email = 'email1@exemplo.com'
-   union all
-   select id, 'Nome 2' from auth.users where email = 'email2@exemplo.com';
-   ```
-5. **Ligar a página ao banco:** em `config.js`, colar a URL do projeto e a chave pública (Project Settings → API Keys).
-6. **Publicar:** no GitHub, em Settings → Pages, escolher "Deploy from a branch", branch `main`, pasta `/ (root)`.
+Já está tudo montado: o banco de dados (arquivos da pasta `supabase`, em ordem) foi aplicado no projeto **lp-personalizados** e o site está no GitHub Pages.
+
+**Primeiro acesso:** ao abrir o site pela primeira vez, aparece a tela "Primeiro acesso" para criar o login (nome, e-mail e senha). Depois que ele é criado, essa tela some e só esse login entra.
+
+**Recomendado:** no Supabase, em Authentication → Sign In / Providers, desligar "Allow new users to sign up". Mesmo ligado, quem se cadastrar por fora não vê nenhum dado.
 
 ## No celular
 
