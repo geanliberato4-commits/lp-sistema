@@ -33,6 +33,9 @@ var MSG_WPP = {
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 var fmtBRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
 function brl(v){return fmtBRL.format(Number(v)||0);}
+var fmtBRL4 = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:2,maximumFractionDigits:4});
+function brl4(v){return fmtBRL4.format(Number(v)||0);}
+function qtdTxt(v){return String(Math.round(num(v)*100)/100).replace('.',',');}
 function pad(n){return (n<10?'0':'')+n;}
 function iso(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function hoje(){return iso(new Date());}
@@ -67,7 +70,7 @@ var CFG=window.LP_CONFIG||{};
 var configurado=CFG.url&&CFG.url.indexOf('http')===0&&CFG.chave&&CFG.chave.indexOf('COLE_AQUI')<0;
 var sb=configurado&&window.supabase?window.supabase.createClient(CFG.url,CFG.chave):null;
 
-var db={pedidos:[],caixa:[],materiais:[],clientes:[],meta:0};
+var db={pedidos:[],caixa:[],materiais:[],clientes:[],usos:[],meta:0};
 var usuario=null; // {id, nome}
 var ocupado=false;
 
@@ -106,14 +109,18 @@ async function recarregar(){
     sb.from('caixa').select('*').order('data',{ascending:false}),
     sb.from('materiais').select('*').order('nome'),
     sb.from('clientes').select('id,nome,telefone').order('nome'),
-    sb.from('configuracoes').select('meta_mensal').eq('id',1).maybeSingle()
+    sb.from('configuracoes').select('meta_mensal').eq('id',1).maybeSingle(),
+    sb.from('movimentos_estoque').select('id,material_id,pedido_id,tipo,quantidade,custo_unitario,criado_em').not('pedido_id','is',null)
   ]);
   db.pedidos=checar(res[0]).map(mapPedido);
   db.caixa=checar(res[1]).map(function(c){return {id:c.id,data:c.data,tipo:c.tipo,categoria:c.categoria,descricao:c.descricao,valor:num(c.valor),forma:c.forma,pedidoId:c.pedido_id,criadoPor:c.criado_por||''};});
-  db.materiais=checar(res[2]).map(function(m){return {id:m.id,nome:m.nome,unidade:m.unidade,qtd:num(m.quantidade),minimo:num(m.minimo),custo:num(m.custo_unitario),fornecedor:m.fornecedor||'',ultimaCompra:m.ultima_compra};});
+  db.materiais=checar(res[2]).map(function(m){return {id:m.id,nome:m.nome,unidade:m.unidade,qtd:num(m.quantidade),minimo:num(m.minimo),custo:num(m.custo_unitario),fornecedor:m.fornecedor||'',ultimaCompra:m.ultima_compra,categoria:m.categoria||'',embalagem:m.embalagem||'',unidEmb:num(m.unidades_embalagem),valorEmb:m.valor_embalagem==null?null:num(m.valor_embalagem)};});
   db.clientes=checar(res[3]);
   var cfg=checar(res[4]);db.meta=cfg?num(cfg.meta_mensal):0;
+  db.usos=checar(res[5]).map(function(u){return {id:u.id,materialId:u.material_id,pedidoId:u.pedido_id,tipo:u.tipo,qtd:num(u.quantidade),custo:num(u.custo_unitario),data:iso(new Date(u.criado_em))};});
 }
+function usosPedido(p){return (db.usos||[]).filter(function(u){return u.pedidoId===p.id;});}
+function custoMateriais(p){var s=0;usosPedido(p).forEach(function(u){s+=u.qtd*u.custo;});return Math.round(s*100)/100;}
 
 function totalPedido(p){var s=0;(p.itens||[]).forEach(function(i){s+=num(i.qtd)*num(i.valor);});return s+num(p.frete)-num(p.desconto);}
 function recebidoPedido(p){var s=0;db.caixa.forEach(function(c){if(c.pedidoId===p.id&&c.tipo==='entrada')s+=num(c.valor);});return s;}
@@ -321,10 +328,10 @@ function telaNovoPedido(){
     '<div class="campo"><label for="np-st">Situação inicial</label><select id="np-st" name="status">'+STATUS.slice(0,5).map(function(s){return '<option value="'+s[0]+'"'+(s[0]==='novo'?' selected':'')+'>'+s[1]+'</option>';}).join('')+'</select></div>'+
   '</div><div class="aviso-demo" id="np-total" style="background:var(--teal-cl);color:var(--teal-esc);font-weight:600">Total do pedido: '+brl(0)+'</div></section>'+
   '<section class="card"><h2>Custos (para o lucro estimado)</h2><div class="campos">'+
-    '<div class="campo"><label for="np-cu">Custo estimado (materiais, mão de obra, embalagem)</label><input id="np-cu" name="custo" type="number" min="0" step="0.01" value="0"></div>'+
+    '<div class="campo"><label for="np-cu">Outros custos: mão de obra, embalagem, etc. (R$)</label><input id="np-cu" name="custo" type="number" min="0" step="0.01" value="0"></div>'+
     '<div class="campo"><label for="np-tx">Taxa da Shopee (R$)</label><input id="np-tx" name="taxa" type="number" min="0" step="0.01" value="0"></div>'+
     '<div class="campo todo"><label for="np-ob">Observações</label><textarea id="np-ob" name="obs"></textarea></div>'+
-  '</div></section>'+
+  '</div><p class="dica" style="margin:0">O custo dos materiais (folhas, adesivos, etc.) é calculado sozinho quando você lança os materiais usados na tela do pedido.</p></section>'+
   '<div class="acoes"><button class="btn" type="submit">Salvar pedido</button><a class="btn contorno" href="#pedidos">Cancelar</a></div>'+
   '</form>';
 }
@@ -352,7 +359,8 @@ async function salvarNovoPedido(f){
 /* ---------- detalhe do pedido ---------- */
 function telaPedido(p){
   var total=totalPedido(p),rec=recebidoPedido(p),saldo=saldoPedido(p);
-  var lucro=total-num(p.custo)-num(p.taxa),margem=total>0?Math.round(lucro/total*100):0;
+  var cMat=custoMateriais(p),usos=usosPedido(p);
+  var lucro=total-cMat-num(p.custo)-num(p.taxa),margem=total>0?Math.round(lucro/total*100):0;
   var d=difDias(p.prazoProducao);
   var digitos=String(p.telefone||'').replace(/\D/g,'');
   if(digitos&&digitos.length<=11)digitos='55'+digitos;
@@ -375,9 +383,12 @@ function telaPedido(p){
     '<div class="acoes">'+(saldo>0&&p.status!=='cancelado'?'<button type="button" class="btn" data-acao="receber" data-num="'+p.num+'">Registrar recebimento</button>':(saldo<=0?'<span class="chip green">Pago</span>':''))+'</div>'+
     (pagamentos.length?'<div class="hist">'+pagamentos.map(function(c){return '<div><span>'+dataCurta(c.data)+'</span><span style="color:var(--texto)">'+brl(c.valor)+' · '+esc(c.forma)+'</span></div>';}).join('')+'</div>':'')+
   '</section>'+
+  '<section class="card"><div class="linha-tit"><h2>Materiais usados</h2><button type="button" class="btn contorno peq" data-acao="usar-mat" data-num="'+p.num+'">+ Adicionar material</button></div>'+
+    (usos.length?'<div class="lista">'+usos.map(function(u){var m=acharMaterial(u.materialId)||{nome:'Material',unidade:''};return '<div class="item"><div class="info"><b>'+esc(m.nome)+(u.tipo==='perda'?' <span class="chip red">perda</span>':'')+'</b><span>'+qtdTxt(u.qtd)+' '+esc(m.unidade)+' × '+brl4(u.custo)+'</span></div><div class="dir"><b>'+brl(u.qtd*u.custo)+'</b><button type="button" class="btn perigo peq" data-acao="desfazer-uso" data-id="'+u.id+'">Remover</button></div></div>';}).join('')+'</div><div class="valores"><div class="total"><span>Custo dos materiais</span><span>'+brl(cMat)+'</span></div></div>':'<div class="vazio">Nenhum material lançado. Ao adicionar, a quantidade sai do estoque e o custo entra no lucro do pedido.</div>')+
+  '</section>'+
   (p.obs?'<section class="card"><h2>Observações</h2><p style="margin:0;font-size:14px;white-space:pre-line">'+esc(p.obs)+'</p></section>':'')+
   '</div><div class="estreita" style="display:flex;flex-direction:column;gap:14px">'+
-  '<section class="card escuro"><h2>Lucro estimado</h2><div class="valores"><div><span>Venda</span><span>'+brl(total)+'</span></div><div><span>Custo</span><span>− '+brl(p.custo)+'</span></div><div><span>Taxa Shopee</span><span>− '+brl(p.taxa)+'</span></div>'+
+  '<section class="card escuro"><h2>Lucro estimado</h2><div class="valores"><div><span>Venda</span><span>'+brl(total)+'</span></div><div><span>Materiais</span><span>− '+brl(cMat)+'</span></div><div><span>Outros custos</span><span>− '+brl(p.custo)+'</span></div><div><span>Taxa Shopee</span><span>− '+brl(p.taxa)+'</span></div>'+
     '<div class="total" style="border-color:var(--linha-esc)"><span>Lucro</span><span class="'+(lucro>=0?'pos':'neg')+'">'+brl(lucro)+'</span></div><div><span>Margem</span><span style="color:var(--ouro);font-weight:700">'+margem+'%</span></div></div>'+
     '<button type="button" class="btn ouro peq" data-acao="custos" data-num="'+p.num+'">Ajustar custos</button></section>'+
   '<section class="card"><h2>Ações</h2><div class="acoes" style="flex-direction:column"><button type="button" class="btn contorno cheio" data-acao="repetir" data-num="'+p.num+'">Repetir pedido</button><button type="button" class="btn contorno cheio" data-acao="ordem" data-num="'+p.num+'">Ordem de produção</button></div></section>'+
@@ -412,8 +423,8 @@ function telaEstoque(){
   var baixos=abaixoMinimo();
   return '<div class="cab"><div><h1>Estoque de materiais</h1><p>O alerta aparece quando o material chega ao mínimo.</p></div><button type="button" class="btn ouro" data-acao="novo-mat">+ Novo material</button></div>'+
   (baixos.length?'<section class="card escuro"><h2>Lista de compras</h2>'+baixos.map(function(b){var sug=Math.max(1,num(b.minimo)*2-num(b.qtd));return '<div class="alerta"><i class="o"></i><span><b>'+esc(b.nome)+'</b>: tem '+b.qtd+', comprar '+sug+' '+esc(b.unidade)+(b.fornecedor?' · '+esc(b.fornecedor):'')+' · previsto '+brl(sug*num(b.custo))+'</span></div>';}).join('')+'</section>':'')+
-  '<section class="card">'+(db.materiais.length?'<div class="tabela"><table><thead><tr><th>Material</th><th class="num">Quantidade</th><th class="num">Mínimo</th><th class="num">Custo un.</th><th>Fornecedor</th><th><span class="sr">Ações</span></th></tr></thead><tbody>'+
-  db.materiais.map(function(m){var baixo=num(m.qtd)<=num(m.minimo);return '<tr><td><b>'+esc(m.nome)+'</b>'+(baixo?' <span class="chip red">Abaixo do mínimo</span>':'')+'</td><td class="num">'+m.qtd+' '+esc(m.unidade)+'</td><td class="num">'+m.minimo+'</td><td class="num">'+brl(m.custo)+'</td><td>'+esc(m.fornecedor||'')+'</td><td class="num"><div class="acoes" style="justify-content:flex-end;flex-wrap:nowrap"><button type="button" class="btn contorno peq" data-acao="mov" data-t="entrada" data-id="'+m.id+'">Entrada</button><button type="button" class="btn contorno peq" data-acao="mov" data-t="saida" data-id="'+m.id+'">Saída</button></div></td></tr>';}).join('')+
+  '<section class="card">'+(db.materiais.length?'<div class="tabela"><table><thead><tr><th>Material</th><th class="num">Quantidade</th><th class="num">Mínimo</th><th class="num">Custo por unidade</th><th>Fornecedor</th><th><span class="sr">Ações</span></th></tr></thead><tbody>'+
+  db.materiais.map(function(m){var baixo=num(m.qtd)<=num(m.minimo);return '<tr><td><b>'+esc(m.nome)+'</b>'+(baixo?' <span class="chip red">Abaixo do mínimo</span>':'')+(m.unidEmb>0?'<div style="font-size:12.5px;color:var(--sec)">'+esc(m.embalagem||'embalagem')+' com '+qtdTxt(m.unidEmb)+' '+esc(m.unidade)+(m.valorEmb!=null?' · '+brl(m.valorEmb):'')+'</div>':'')+'</td><td class="num">'+qtdTxt(m.qtd)+' '+esc(m.unidade)+'</td><td class="num">'+qtdTxt(m.minimo)+'</td><td class="num">'+brl4(m.custo)+'</td><td>'+esc(m.fornecedor||'')+'</td><td class="num"><div class="acoes" style="justify-content:flex-end;flex-wrap:nowrap"><button type="button" class="btn contorno peq" data-acao="editar-mat" data-id="'+m.id+'">Editar</button><button type="button" class="btn contorno peq" data-acao="mov" data-t="entrada" data-id="'+m.id+'">Entrada</button><button type="button" class="btn contorno peq" data-acao="mov" data-t="saida" data-id="'+m.id+'">Saída</button></div></td></tr>';}).join('')+
   '</tbody></table></div>':'<div class="vazio">Nenhum material cadastrado ainda. Toque em “+ Novo material”.</div>')+'</section>';
 }
 
@@ -435,6 +446,41 @@ function aviso(t){
 }
 function botoesForm(rotulo){return '<div class="acoes"><button class="btn" type="submit">'+rotulo+'</button><button type="button" class="btn contorno" data-acao="fechar">Cancelar</button></div>';}
 
+function formMaterial(m){
+  var e=!!m;m=m||{nome:'',categoria:'',unidade:'un',qtd:0,minimo:0,fornecedor:'',embalagem:'',unidEmb:0,valorEmb:null,custo:0};
+  var temPac=m.unidEmb>0;
+  return '<h2>'+(e?'Editar material':'Novo material')+'</h2><form data-form="mat" '+(e?'data-id="'+m.id+'"':'')+' style="display:flex;flex-direction:column;gap:12px">'+
+    '<div class="campo"><label for="nm-n">Nome</label><input id="nm-n" name="nome" required value="'+esc(m.nome)+'" placeholder="Ex.: Folha sulfite A4"></div>'+
+    '<div class="campos"><div class="campo"><label for="nm-u">Unidade (como você usa)</label><input id="nm-u" name="unidade" required value="'+esc(m.unidade)+'" placeholder="folha, un, adesivo, metro"></div>'+
+    '<div class="campo"><label for="nm-g">Categoria</label><input id="nm-g" name="categoria" value="'+esc(m.categoria)+'" placeholder="Papéis, adesivos, embalagens…"></div>'+
+    '<div class="campo"><label for="nm-q">Quantidade em estoque</label><input id="nm-q" name="qtd" type="number" min="0" step="0.01" required value="'+num(m.qtd)+'"></div>'+
+    '<div class="campo"><label for="nm-m">Estoque mínimo</label><input id="nm-m" name="minimo" type="number" min="0" step="0.01" required value="'+num(m.minimo)+'"></div></div>'+
+    '<div class="campo"><label for="nm-f">Fornecedor</label><input id="nm-f" name="fornecedor" value="'+esc(m.fornecedor)+'"></div>'+
+    '<section class="card" style="padding:14px;gap:10px;background:var(--fundo)"><h3>Custo</h3><p class="dica" style="margin:0">Se compra em pacote, caixa ou rolo, preencha a embalagem e o sistema calcula o custo de cada unidade.</p>'+
+    '<div class="campos"><div class="campo"><label for="nm-e">Embalagem</label><input id="nm-e" name="embalagem" value="'+esc(m.embalagem)+'" placeholder="pacote, caixa, rolo"></div>'+
+    '<div class="campo"><label for="nm-ue">Unidades na embalagem</label><input id="nm-ue" name="unidEmb" type="number" min="0" step="0.01" value="'+(temPac?num(m.unidEmb):'')+'" placeholder="Ex.: 500"></div>'+
+    '<div class="campo"><label for="nm-ve">Valor da embalagem (R$)</label><input id="nm-ve" name="valorEmb" type="number" min="0" step="0.01" value="'+(temPac&&m.valorEmb!=null?num(m.valorEmb):'')+'" placeholder="Ex.: 25,00"></div></div>'+
+    '<div class="campo" id="nm-direto"><label for="nm-c">Ou custo por unidade, se não compra em embalagem (R$)</label><input id="nm-c" name="custo" type="number" min="0" step="0.0001" value="'+(temPac?'':num(m.custo))+'"></div>'+
+    '<div class="aviso-demo" id="nm-prev" style="background:var(--teal-cl);color:var(--teal-esc);font-weight:600"></div></section>'+
+    botoesForm('Salvar')+'</form>';
+}
+function calcCustoMat(f){
+  var u=num(f.unidEmb.value),v=f.valorEmb.value===''?null:num(f.valorEmb.value);
+  if(u>0&&v!==null)return {pacote:true,custo:Math.round(v/u*10000)/10000,u:u,v:v};
+  return {pacote:false,custo:num(f.custo.value)};
+}
+function atualizarPreviaMat(){
+  var f=document.querySelector('[data-form="mat"]');if(!f)return;
+  var c=calcCustoMat(f),un=f.unidade.value.trim()||'unidade',el=document.getElementById('nm-prev');
+  document.getElementById('nm-direto').style.display=c.pacote?'none':'';
+  el.textContent=c.pacote?('Custo por '+un+': '+brl(c.v)+' ÷ '+qtdTxt(c.u)+' = '+brl4(c.custo)):('Custo por '+un+': '+brl4(c.custo));
+}
+function atualizarPreviaUso(){
+  var f=document.querySelector('[data-form="uso"]');if(!f)return;
+  var m=acharMaterial(f.material.value),q=num(f.qtd.value),el=document.getElementById('us-prev');
+  if(m)el.textContent=qtdTxt(q)+' '+m.unidade+' × '+brl4(m.custo)+' = '+brl(q*m.custo)+' de custo no pedido';
+}
+
 /* ---------- eventos ---------- */
 document.addEventListener('click',function(e){
   var b=e.target.closest('[data-acao]');if(!b||b.tagName==='SELECT')return;
@@ -451,7 +497,7 @@ document.addEventListener('click',function(e){
   else if(a==='receber'){p=acharPedido(b.getAttribute('data-num'));var s=saldoPedido(p);
     modal('<h2>Registrar recebimento</h2><p style="margin:0;color:var(--sec)">Pedido '+numPedido(p.num)+' · saldo de '+brl(s)+'</p><form data-form="receber" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="rc-v">Valor recebido (R$)</label><input id="rc-v" name="valor" type="number" min="0.01" max="'+s+'" step="0.01" required value="'+s+'"></div><div class="campo"><label for="rc-f">Forma</label><select id="rc-f" name="forma">'+FORMAS.map(function(o){return '<option'+(p.origem==='Shopee'&&o==='Repasse Shopee'?' selected':'')+'>'+o+'</option>';}).join('')+'</select></div><div class="campo"><label for="rc-d">Data</label><input id="rc-d" name="data" type="date" required value="'+hoje()+'"></div>'+botoesForm('Lançar no caixa')+'</form>');}
   else if(a==='custos'){p=acharPedido(b.getAttribute('data-num'));
-    modal('<h2>Ajustar custos</h2><form data-form="custos" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="cu-c">Custo total estimado (R$)</label><input id="cu-c" name="custo" type="number" min="0" step="0.01" value="'+num(p.custo)+'"></div><div class="campo"><label for="cu-t">Taxa da Shopee (R$)</label><input id="cu-t" name="taxa" type="number" min="0" step="0.01" value="'+num(p.taxa)+'"></div>'+botoesForm('Salvar')+'</form>');}
+    modal('<h2>Ajustar custos</h2><form data-form="custos" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="cu-c">Outros custos: mão de obra, embalagem, etc. (R$)</label><input id="cu-c" name="custo" type="number" min="0" step="0.01" value="'+num(p.custo)+'"></div><div class="campo"><label for="cu-t">Taxa da Shopee (R$)</label><input id="cu-t" name="taxa" type="number" min="0" step="0.01" value="'+num(p.taxa)+'"></div>'+botoesForm('Salvar')+'</form>');}
   else if(a==='editar'){p=acharPedido(b.getAttribute('data-num'));
     modal('<h2>Editar pedido '+numPedido(p.num)+'</h2><form data-form="editar" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px">'+
       '<div class="campo"><label for="ed-tel">WhatsApp</label><input id="ed-tel" name="telefone" value="'+esc(p.telefone)+'"></div>'+
@@ -475,16 +521,30 @@ document.addEventListener('click',function(e){
     modal('<h2>Excluir lançamento?</h2><p style="margin:0;color:var(--sec)">'+esc(c2.descricao)+' · '+brl(c2.valor)+(c2.pedidoId?'<br>Este valor sairá do recebido do pedido.':'')+'</p><div class="acoes"><button type="button" class="btn perigo" data-acao="excluir-ok" data-id="'+id+'">Excluir</button><button type="button" class="btn contorno" data-acao="fechar">Cancelar</button></div>');}
   else if(a==='excluir-ok'){var id2=b.getAttribute('data-id');fecharModal();executar(async function(){checar(await sb.from('caixa').delete().eq('id',id2));},'Lançamento excluído.').then(desenhar);}
   else if(a==='mov'){var mt=acharMaterial(b.getAttribute('data-id')),t=b.getAttribute('data-t');
-    modal('<h2>'+(t==='entrada'?'Entrada':'Saída')+' de material</h2><p style="margin:0;color:var(--sec)">'+esc(mt.nome)+' · hoje: '+mt.qtd+' '+esc(mt.unidade)+'</p><form data-form="mov" data-id="'+mt.id+'" data-t="'+t+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="mv-q">Quantidade ('+esc(mt.unidade)+')</label><input id="mv-q" name="qtd" type="number" min="0.01" step="0.01" required value="1"></div>'+
+    var pac=t==='entrada'&&mt.unidEmb>0;
+    modal('<h2>'+(t==='entrada'?'Entrada':'Saída')+' de material</h2><p style="margin:0;color:var(--sec)">'+esc(mt.nome)+' · hoje: '+qtdTxt(mt.qtd)+' '+esc(mt.unidade)+'</p><form data-form="mov" data-id="'+mt.id+'" data-t="'+t+'" style="display:flex;flex-direction:column;gap:12px">'+
+      (pac?'<div class="campo"><label for="mv-q">Quantas embalagens? ('+esc(mt.embalagem||'embalagem')+' com '+qtdTxt(mt.unidEmb)+' '+esc(mt.unidade)+')</label><input id="mv-q" name="qtd" type="number" min="1" step="1" required value="1"></div><input type="hidden" name="pacote" value="1">':'<div class="campo"><label for="mv-q">Quantidade ('+esc(mt.unidade)+')</label><input id="mv-q" name="qtd" type="number" min="0.01" step="0.01" required value="1"></div>')+
       (t==='saida'?'<div class="campo"><label for="mv-m">Motivo</label><select id="mv-m" name="motivo"><option value="consumo">Consumo em pedido</option><option value="perda">Perda ou erro</option></select></div><div class="campo"><label for="mv-p">Pedido (opcional)</label><select id="mv-p" name="pedido"><option value="">—</option>'+db.pedidos.filter(aberto).map(function(x){return '<option value="'+x.id+'">'+numPedido(x.num)+' · '+esc(x.cliente)+'</option>';}).join('')+'</select></div>':
-      '<div class="campo"><label for="mv-c">Valor total da compra (R$)</label><input id="mv-c" name="valor" type="number" min="0" step="0.01" placeholder="Deixe vazio para não lançar no caixa"></div><div class="campo"><label for="mv-f">Forma de pagamento</label><select id="mv-f" name="forma">'+FORMAS.map(function(o){return '<option>'+o+'</option>';}).join('')+'</select></div>')+
+      '<div class="campo"><label for="mv-c">Valor total pago (R$)</label><input id="mv-c" name="valor" type="number" min="0" step="0.01" placeholder="Deixe vazio para não lançar no caixa"></div><p class="dica" style="margin:0">Com o valor, a compra entra no caixa e o custo por unidade é atualizado.</p><div class="campo"><label for="mv-f">Forma de pagamento</label><select id="mv-f" name="forma">'+FORMAS.map(function(o){return '<option>'+o+'</option>';}).join('')+'</select></div>')+
       botoesForm('Confirmar')+'</form>');}
-  else if(a==='novo-mat'){
-    modal('<h2>Novo material</h2><form data-form="mat" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="nm-n">Nome</label><input id="nm-n" name="nome" required></div><div class="campos"><div class="campo"><label for="nm-u">Unidade</label><input id="nm-u" name="unidade" required value="un"></div><div class="campo"><label for="nm-q">Quantidade atual</label><input id="nm-q" name="qtd" type="number" min="0" step="0.01" required value="0"></div><div class="campo"><label for="nm-m">Estoque mínimo</label><input id="nm-m" name="minimo" type="number" min="0" step="0.01" required value="0"></div><div class="campo"><label for="nm-c">Custo unitário (R$)</label><input id="nm-c" name="custo" type="number" min="0" step="0.01" value="0"></div></div><div class="campo"><label for="nm-f">Fornecedor</label><input id="nm-f" name="fornecedor"></div>'+botoesForm('Salvar')+'</form>');}
+  else if(a==='novo-mat'){modal(formMaterial(null));atualizarPreviaMat();}
+  else if(a==='editar-mat'){modal(formMaterial(acharMaterial(b.getAttribute('data-id'))));atualizarPreviaMat();}
+  else if(a==='usar-mat'){p=acharPedido(b.getAttribute('data-num'));
+    if(!db.materiais.length){aviso('Cadastre os materiais no Estoque primeiro.');return;}
+    modal('<h2>Material usado no pedido '+numPedido(p.num)+'</h2><form data-form="uso" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="campo"><label for="us-m">Material</label><select id="us-m" name="material">'+db.materiais.map(function(m){return '<option value="'+m.id+'">'+esc(m.nome)+' · '+brl4(m.custo)+' por '+esc(m.unidade)+' · tem '+qtdTxt(m.qtd)+'</option>';}).join('')+'</select></div>'+
+      '<div class="campo"><label for="us-q">Quantidade usada</label><input id="us-q" name="qtd" type="number" min="0.01" step="0.01" required value="1"></div>'+
+      '<div class="campo"><label for="us-t">Tipo</label><select id="us-t" name="tipo"><option value="consumo">Usado no pedido</option><option value="perda">Perda ou erro (também entra no custo)</option></select></div>'+
+      '<div class="aviso-demo" id="us-prev" style="background:var(--teal-cl);color:var(--teal-esc);font-weight:600"></div>'+
+      botoesForm('Lançar')+'</form>');atualizarPreviaUso();}
+  else if(a==='desfazer-uso'){var idu=b.getAttribute('data-id');
+    modal('<h2>Remover este material do pedido?</h2><p style="margin:0;color:var(--sec)">A quantidade volta para o estoque e o custo sai do pedido.</p><div class="acoes"><button type="button" class="btn perigo" data-acao="desfazer-ok" data-id="'+idu+'">Remover</button><button type="button" class="btn contorno" data-acao="fechar">Cancelar</button></div>');}
+  else if(a==='desfazer-ok'){var idd=b.getAttribute('data-id');fecharModal();executar(async function(){checar(await sb.from('movimentos_estoque').delete().eq('id',idd));},'Material devolvido ao estoque.').then(desenhar);}
 });
 
 document.addEventListener('change',function(e){
   var s=e.target;
+  if(s.closest&&s.closest('[data-form="uso"]')){atualizarPreviaUso();return;}
   if(s.getAttribute&&s.getAttribute('data-acao')==='mudar-status'){
     var p=acharPedido(s.getAttribute('data-num')),novo=s.value;
     executar(async function(){checar(await sb.from('pedidos').update({status:novo}).eq('id',p.id));},'Situação atualizada: '+statusInfo(novo)[1]+'.').then(desenhar);
@@ -498,6 +558,8 @@ document.addEventListener('input',function(e){
     if(c&&c.telefone&&tel&&!tel.value)tel.value=c.telefone;
   }
   if(e.target.closest&&e.target.closest('[data-form="pedido"]'))atualizarTotalNovo();
+  if(e.target.closest&&e.target.closest('[data-form="mat"]'))atualizarPreviaMat();
+  if(e.target.closest&&e.target.closest('[data-form="uso"]'))atualizarPreviaUso();
 });
 document.addEventListener('keydown',function(e){if(e.key==='Escape')fecharModal();});
 
@@ -553,22 +615,43 @@ document.addEventListener('submit',function(e){
   }
   else if(t==='mov'){
     var m=acharMaterial(f.getAttribute('data-id')),tp=f.getAttribute('data-t'),q=num(f.qtd.value);
-    if(tp==='saida'&&q>num(m.qtd)){aviso('Não há '+q+' '+m.unidade+' em estoque.');return;}
+    var pac=!!f.pacote,emb=q;if(pac)q=emb*m.unidEmb;
+    if(tp==='saida'&&q>num(m.qtd)){aviso('Não há '+qtdTxt(q)+' '+m.unidade+' em estoque.');return;}
     executar(async function(){
       if(tp==='entrada'){
         checar(await sb.from('movimentos_estoque').insert({material_id:m.id,tipo:'entrada',quantidade:q}));
         var valor=num(f.valor.value);
         if(valor>0){
-          checar(await sb.from('caixa').insert({tipo:'saida',categoria:'Materiais',descricao:'Compra: '+q+' '+m.unidade+' de '+m.nome,valor:valor,forma:f.forma.value}));
-          checar(await sb.from('materiais').update({custo_unitario:Math.round(valor/q*100)/100}).eq('id',m.id));
+          checar(await sb.from('caixa').insert({tipo:'saida',categoria:'Materiais',descricao:'Compra: '+(pac?emb+' '+(m.embalagem||'embalagem')+' ('+qtdTxt(q)+' '+m.unidade+')':qtdTxt(q)+' '+m.unidade)+' de '+m.nome,valor:valor,forma:f.forma.value}));
+          if(pac)checar(await sb.from('materiais').update({valor_embalagem:Math.round(valor/emb*100)/100}).eq('id',m.id));
+          else checar(await sb.from('materiais').update({custo_unitario:Math.round(valor/q*10000)/10000,valor_embalagem:null,unidades_embalagem:null}).eq('id',m.id));
         }
       } else {
         checar(await sb.from('movimentos_estoque').insert({material_id:m.id,tipo:f.motivo.value,quantidade:q,pedido_id:f.pedido.value||null}));
       }
     },tp==='entrada'?'Entrada registrada.':'Saída registrada.').then(fim);
   }
+  else if(t==='uso'){
+    var pu=acharPedido(f.getAttribute('data-num')),mu=acharMaterial(f.material.value),qu=num(f.qtd.value);
+    if(qu<=0){aviso('Informe a quantidade.');return;}
+    if(qu>num(mu.qtd)){aviso('Só tem '+qtdTxt(mu.qtd)+' '+mu.unidade+' de '+mu.nome+' no estoque.');return;}
+    executar(async function(){checar(await sb.from('movimentos_estoque').insert({material_id:mu.id,tipo:f.tipo.value,quantidade:qu,pedido_id:pu.id}));},'Material lançado no pedido.').then(fim);
+  }
   else if(t==='mat'){
-    executar(async function(){checar(await sb.from('materiais').insert({nome:f.nome.value.trim(),unidade:f.unidade.value.trim(),quantidade:num(f.qtd.value),minimo:num(f.minimo.value),custo_unitario:num(f.custo.value),fornecedor:f.fornecedor.value.trim()||null}));},'Material cadastrado.').then(fim);
+    var idm=f.getAttribute('data-id'),c=calcCustoMat(f);
+    var dadosM={nome:f.nome.value.trim(),unidade:f.unidade.value.trim(),categoria:f.categoria.value.trim()||null,minimo:num(f.minimo.value),fornecedor:f.fornecedor.value.trim()||null,
+      embalagem:f.embalagem.value.trim()||null,unidades_embalagem:c.pacote?c.u:null,valor_embalagem:c.pacote?c.v:null,custo_unitario:c.custo};
+    var novaQ=num(f.qtd.value);
+    if(!idm){
+      dadosM.quantidade=novaQ;
+      executar(async function(){checar(await sb.from('materiais').insert(dadosM));},'Material cadastrado.').then(fim);
+    } else {
+      var mAnt=acharMaterial(idm);
+      executar(async function(){
+        checar(await sb.from('materiais').update(dadosM).eq('id',idm));
+        if(Math.abs(novaQ-num(mAnt.qtd))>0.0001)checar(await sb.from('movimentos_estoque').insert({material_id:idm,tipo:'ajuste',quantidade:novaQ,observacao:'Ajuste na edição do material'}));
+      },'Material atualizado.').then(fim);
+    }
   }
 });
 

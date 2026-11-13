@@ -20,6 +20,13 @@ Já está tudo montado: o banco de dados (arquivos da pasta `supabase`, em ordem
 
 Abra o endereço do site e use "Adicionar à tela inicial". O sistema abre como um aplicativo, com a logo.
 
+## Estoque e custo dos materiais
+
+- **Editar material:** no Estoque, botão "Editar" muda nome, unidade, categoria, quantidade, mínimo, fornecedor e custo. Mudar a quantidade fica registrado como ajuste.
+- **Custo por unidade:** informe a embalagem (ex.: pacote), quantas unidades vêm nela (500) e o valor (R$ 25,00). O sistema calcula R$ 0,05 por folha.
+- **Compra de embalagens:** em "Entrada", informe quantas embalagens comprou e o valor pago. O estoque soma as unidades, a compra entra no caixa e o custo por unidade é atualizado.
+- **Materiais do pedido:** na tela do pedido, "Materiais usados" → "+ Adicionar material". A quantidade sai do estoque e o custo entra no lucro do pedido (ex.: 20 folhas × R$ 0,05 = R$ 1,00). O custo fica guardado com o preço do dia, e "Remover" devolve ao estoque.
+
 ## Regras automáticas do banco
 
 - O caixa não aceita receber mais do que o saldo de um pedido, o que evita lançamento duplicado.
