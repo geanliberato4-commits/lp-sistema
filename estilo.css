@@ -253,3 +253,86 @@ h3{font-size:15px}
 .dica-grafico{position:fixed;z-index:80;background:var(--preto);color:#fff;border-radius:10px;padding:8px 10px;font-size:12.5px;display:none;flex-direction:column;gap:2px;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.2);max-width:240px}
 .dica-grafico b{display:block;font-size:13px}
 .dica-grafico span{display:block;color:#E4E7EB}
+
+/* ---------- iPhone: áreas seguras e toque ---------- */
+html{-webkit-text-size-adjust:100%}
+button,a,.mat-card{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.topo{padding-top:calc(10px + env(safe-area-inset-top));padding-left:calc(16px + env(safe-area-inset-left));padding-right:calc(16px + env(safe-area-inset-right))}
+.inferior{height:calc(72px + env(safe-area-inset-bottom));padding-bottom:env(safe-area-inset-bottom)}
+.conteudo{padding-bottom:calc(100px + env(safe-area-inset-bottom))}
+.toast{bottom:calc(90px + env(safe-area-inset-bottom))}
+.modal{padding-bottom:calc(20px + env(safe-area-inset-bottom))}
+.login{padding-top:calc(32px + env(safe-area-inset-top))}
+
+/* ---------- estoque ---------- */
+.est-resumo{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (min-width:900px){.est-resumo{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.est-tile{background:#fff;border:1px solid var(--borda);border-radius:16px;padding:12px;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:10px;align-items:center;text-align:left;font:inherit;color:inherit}
+.est-tile .est-ic{grid-row:1/3}
+.est-tile b{font-family:Poppins,sans-serif;font-size:18px;font-weight:600;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.est-tile small{font-size:12px;color:var(--sec)}
+.est-tile.alerta-tile{background:#FFF7ED;border-color:#FED7AA}
+.est-ic{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff}
+.est-ic svg{width:20px;height:20px}
+.est-ic.grande{width:60px;height:60px;border-radius:18px}
+.est-ic.grande svg{width:30px;height:30px}
+.compra-banner{background:var(--preto);color:#fff;border-radius:16px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.compra-banner div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.compra-banner span{font-size:13px;color:var(--prata);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.compra-banner .btn{background:var(--destaque);color:var(--preto);flex-shrink:0}
+.est-busca{position:sticky;top:calc(69px + env(safe-area-inset-top));z-index:4;background:var(--fundo);padding:4px 0}
+@media (min-width:900px){.est-busca{top:0}}
+.mat-grade{display:grid;grid-template-columns:1fr;gap:12px}
+@media (min-width:700px){.mat-grade{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1200px){.mat-grade{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.mat-card{background:#fff;border:1px solid var(--borda);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden}
+.mat-card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--teal)}
+.mat-card.st-baixo::before{background:var(--atencao)}
+.mat-card.st-zerado::before{background:var(--verm)}
+.mat-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;background:none;border:none;padding:0;text-align:left;font:inherit;color:inherit;width:100%}
+.mat-nome{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mat-nome b{font-family:Poppins,sans-serif;font-size:16px;font-weight:600}
+.mat-nome small{font-size:12.5px;color:var(--sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mat-qtd{display:flex;align-items:baseline;gap:8px;background:none;border:none;padding:0;font:inherit;color:inherit;text-align:left}
+.mat-qtd b{font-family:Poppins,sans-serif;font-size:30px;font-weight:700;line-height:1;color:var(--texto)}
+.st-zerado .mat-qtd b{color:var(--verm)}
+.mat-qtd span{font-size:13.5px;color:var(--sec)}
+.nivel{position:relative;height:10px;border-radius:999px;background:var(--linha);overflow:visible}
+.nivel.grande{height:14px}
+.nivel-barra{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--teal)}
+.st-baixo .nivel-barra{background:var(--atencao)}
+.st-zerado .nivel-barra{background:var(--verm)}
+.nivel-min{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--texto);border-radius:1px;opacity:.55}
+.mat-info{display:flex;justify-content:space-between;font-size:12.5px;color:var(--sec)}
+.mat-acoes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mat-btn{height:48px;border-radius:14px;font-family:Poppins,sans-serif;font-weight:600;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px;border:1.5px solid}
+.mat-btn span{font-size:22px;line-height:1;font-weight:500}
+.mat-btn.entra{background:var(--teal);border-color:var(--teal);color:#fff}
+.mat-btn.entra:active{background:var(--teal-esc)}
+.mat-btn.sai{background:#fff;border-color:var(--borda);color:var(--texto)}
+.mat-btn.sai:active{background:var(--linha)}
+.est-vazio{align-items:center;text-align:center;padding:28px 18px}
+.est-vazio p{margin:0;color:var(--sec);font-size:14px;max-width:360px}
+/* ficha do material */
+.ficha-mat{padding-top:0}
+.ficha-topo{margin:0 -20px;padding:16px 20px;background:var(--teal);color:#fff;display:flex;justify-content:space-between;gap:12px;border-radius:20px 20px 0 0}
+.ficha-topo.st-baixo{background:#C2410C}
+.ficha-topo.st-zerado{background:var(--verm)}
+.ficha-topo h2{color:#fff;font-size:19px}
+.ficha-topo p{margin:4px 0 0;font-size:13px;color:rgba(255,255,255,.85)}
+.menu-fechar.claro{border-color:rgba(255,255,255,.4)}
+.ficha-qtd{display:flex;align-items:baseline;gap:8px}
+.ficha-qtd b{font-family:Poppins,sans-serif;font-size:40px;font-weight:700;line-height:1}
+.ficha-qtd span{color:var(--sec)}
+.ficha-sub{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--sec);font-weight:700;margin-bottom:6px}
+.ficha-chips{display:flex;flex-wrap:wrap;gap:6px}
+.ficha-chips a{text-decoration:none}
+.ficha-rodape .btn{flex:1}
+@media (min-width:600px){.ficha-topo{border-radius:20px 20px 0 0}}
+/* quantidade com − e + */
+.stepper{display:grid;grid-template-columns:56px 1fr 56px;gap:8px}
+.stepper button{height:52px;border-radius:14px;border:1.5px solid var(--borda);background:#fff;font-size:26px;font-weight:500;color:var(--teal-esc)}
+.stepper button:active{background:var(--teal-cl)}
+.stepper input{height:52px;text-align:center;font-size:22px;font-weight:700;font-family:Poppins,sans-serif;border:1.5px solid var(--prata);border-radius:14px;width:100%}
+.atalhos{display:flex;gap:8px}
+.atalhos button{flex:1;height:40px;border-radius:999px;border:1px solid var(--borda);background:var(--fundo);font-weight:600;color:var(--teal-esc)}
