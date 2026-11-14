@@ -20,6 +20,15 @@ Já está tudo montado: o banco de dados (arquivos da pasta `supabase`, em ordem
 
 Abra o endereço do site e use "Adicionar à tela inicial". O sistema abre como um aplicativo, com a logo.
 
+## O que o sistema faz
+
+- **Pedidos:** cadastro com produtos da ficha técnica ou itens personalizados, canal de venda, taxas da Shopee estimadas, prazos e sinal. Dá para editar e excluir. A exclusão é lógica: o pedido fica guardado em "Excluídos", com motivo, data e quem excluiu.
+- **Baixa automática:** quando o pedido chega na etapa escolhida em Ajustes (padrão: Em produção), os materiais da ficha saem do estoque uma única vez. Editar o pedido ajusta só a diferença. Cancelar ou excluir permite devolver ao estoque o que não foi usado. Se faltar material, o sistema avisa quanto precisa, quanto tem e quanto comprar.
+- **Produtos:** ficha técnica com os materiais do estoque, mão de obra, embalagem e outros custos, além de foto e variações. A precificação mostra sugestões de 80%, 100% e 150% sobre o custo, um percentual próprio, as taxas da Shopee, o lucro líquido e o cálculo inverso (quanto cobrar para lucrar X).
+- **Orçamentos:** itens cadastrados ou personalizados (com materiais), situação, editar, duplicar, copiar a mensagem para o WhatsApp, gerar PDF com a logo (sem custos internos) e transformar em pedido.
+- **Caixa:** lançamentos, totais por categoria e resultado por pedido (estimado e realizado). Devoluções a clientes entram como saída, sem apagar o recebimento.
+- **Ajustes:** taxas da Shopee (% e tarifa fixa por pedido ou por item), outras despesas, etapa da baixa e meta do mês.
+
 ## Estoque e custo dos materiais
 
 - **Editar material:** no Estoque, botão "Editar" muda nome, unidade, categoria, quantidade, mínimo, fornecedor e custo. Mudar a quantidade fica registrado como ajuste.
