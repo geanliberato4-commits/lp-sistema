@@ -396,6 +396,7 @@ function telaPainel(){
     '<a href="#ajustes" class="btn contorno peq" style="align-self:flex-start">Definir meta do mês</a>';
   return '<div class="cab"><div><h1 class="so-desk">Painel</h1><p>Olá, '+esc(usuario.nome)+' · '+esc(hojeExtenso())+'</p></div><div class="acoes"><a class="btn contorno" href="#novo-orcamento">+ Orçamento</a><a class="btn ouro" href="#novo-pedido">+ Pedido</a></div></div>'+
   '<div class="grade">'+tile('novo','Novos')+tile('aguardando_pagamento','Aguard. pagamento')+tile('aguardando_arte','Aguardando arte','ouro')+tile('em_producao','Em produção','teal')+tile('pronto_envio','Pronto para envio')+tile('enviado','Enviados')+tile('atrasados','Atrasados','verm')+'</div>'+
+  (function(){var ag=new Date(),pm=porMes(mesesAte(ag.getFullYear(),ag.getMonth(),6));return '<section class="card"><div class="linha-tit"><h2>Vendas dos últimos 6 meses</h2><a href="#relatorios" style="font-size:13.5px;font-weight:600;text-decoration:none">Relatórios</a></div><p class="dica" style="margin:0">Valor dos pedidos feitos em cada mês. Toque numa coluna para ver os números.</p>'+graficoColunas({titulo:'Vendas dos últimos 6 meses',rotulos:pm.map(function(x){return x.rot;}),nomes:pm.map(function(x){return x.nome;}),series:[{nome:'Vendas',cor:COR_S1,valores:pm.map(function(x){return x.fat;})}],destaque:5,fmtRot:brl})+'</section>';})()+
   '<div class="dupla"><section class="card larga"><div class="linha-tit"><h2>Prazos próximos</h2><a href="#pedidos" style="font-size:13.5px;font-weight:600;text-decoration:none">Ver todos</a></div><div class="lista">'+
   (prox.length?prox.map(itemPedido).join(''):'<div class="vazio">Nenhum pedido em aberto.</div>')+'</div></section>'+
   '<div class="estreita" style="display:flex;flex-direction:column;gap:14px"><section class="card escuro"><h2>Alertas</h2>'+alertas+'</section>'+
@@ -597,7 +598,7 @@ function telaPedido(p){
     '<tr><td>Outros custos</td><td class="num">− '+brl(p.custo)+'</td><td class="num">− '+brl(p.custo)+'</td></tr>'+
     '<tr><td>Taxas Shopee</td><td class="num">− '+brl(p.taxa)+'</td><td class="num">− '+brl(p.taxa)+'</td></tr>'+
     '<tr><td><b>Lucro</b></td><td class="num"><b class="'+(lucroEst>=0?'pos':'neg')+'">'+brl(lucroEst)+'</b></td><td class="num"><b class="'+(lucroReal>=0?'pos':'neg')+'">'+brl(lucroReal)+'</b></td></tr>'+
-    '<tr><td>Margem</td><td class="num" style="color:var(--ouro)">'+(total>0?pct(lucroEst/total*100):'—')+'</td><td class="num" style="color:var(--ouro)">'+(rec>0?pct(lucroReal/rec*100):'—')+'</td></tr>'+
+    '<tr><td>Margem</td><td class="num" style="color:var(--destaque)">'+(total>0?pct(lucroEst/total*100):'—')+'</td><td class="num" style="color:var(--destaque)">'+(rec>0?pct(lucroReal/rec*100):'—')+'</td></tr>'+
     '</tbody></table></div><p class="dica" style="margin:0;color:var(--prata)">Realizado usa o dinheiro já recebido e os materiais que saíram de fato do estoque'+(baixou?'':' (ainda não houve baixa)')+'.</p>'+
     (p.excluido?'':'<button type="button" class="btn ouro peq" data-acao="custos" data-num="'+p.num+'">Ajustar custos e taxas</button>')+'</section>'+
   '<section class="card"><h2>Ações</h2><div class="acoes" style="flex-direction:column"><button type="button" class="btn contorno cheio" data-acao="repetir" data-num="'+p.num+'">Repetir pedido</button><button type="button" class="btn contorno cheio" data-acao="ordem" data-num="'+p.num+'">Ordem de produção</button></div></section>'+
@@ -863,7 +864,7 @@ async function gerarPdfOrc(o){
   if(!window.jspdf){aviso('O gerador de PDF não carregou. Confira a internet e tente de novo.');return;}
   var J=window.jspdf.jsPDF,doc=new J({unit:'mm',format:'a4'}),W=210,M=16,y=16;
   var logo=await carregarLogo();
-  doc.setFillColor(17,19,24);doc.rect(0,0,W,42,'F');doc.setFillColor(242,194,48);doc.rect(0,42,W,1.6,'F');
+  doc.setFillColor(17,19,24);doc.rect(0,0,W,42,'F');doc.setFillColor(43,179,192);doc.rect(0,42,W,1.6,'F');
   if(logo)doc.addImage(logo,'PNG',M,5,45,32);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(20);doc.text('ORÇAMENTO',W-M,18,{align:'right'});
   doc.setFontSize(11);doc.setFont('helvetica','normal');doc.text('Nº '+String(o.num).padStart(4,'0'),W-M,25,{align:'right'});
@@ -888,8 +889,8 @@ async function gerarPdfOrc(o){
   if(o.desconto||o.frete)tot('Subtotal',sub);
   if(o.desconto)tot('Desconto',o.desconto,true);
   if(o.frete)tot('Frete',o.frete);
-  doc.setFillColor(242,194,48);doc.rect(W-M-80,y-4,80,11,'F');doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(17,19,24);doc.text('TOTAL',W-M-50,y+3.5,{align:'right'});doc.text(brl(totalOrc(o)),W-M-3,y+3.5,{align:'right'});
-  y+=18;doc.setFontSize(10);
+  doc.setFillColor(11,122,136);doc.rect(W-M-80,y-4,80,11,'F');doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(255,255,255);doc.text('TOTAL',W-M-50,y+3.5,{align:'right'});doc.text(brl(totalOrc(o)),W-M-3,y+3.5,{align:'right'});
+  y+=18;doc.setFontSize(10);doc.setTextColor(17,19,24);
   if(o.prazo){doc.setFont('helvetica','bold');doc.text('Prazo de produção',M,y);doc.setFont('helvetica','normal');var lp=doc.splitTextToSize(o.prazo,W-2*M);doc.text(lp,M,y+5);y+=6+lp.length*5;}
   if(o.obs){if(y>250){doc.addPage();y=20;}doc.setFont('helvetica','bold');doc.text('Observações',M,y);doc.setFont('helvetica','normal');var lo=doc.splitTextToSize(o.obs,W-2*M);doc.text(lo,M,y+5);y+=6+lo.length*5;}
   doc.setFontSize(9);doc.setTextColor(91,98,112);doc.text('LP Personalizados · (19) 99650-7490',W/2,288,{align:'center'});
@@ -1059,7 +1060,7 @@ document.addEventListener('click',function(e){
   if(b.tagName==='A'&&b.getAttribute('href')==='#')e.preventDefault();
   if(a==='sair'){fecharModal();sb.auth.signOut().finally(function(){usuario=null;desenhar();});}
   else if(a==='menu'){abrirMenu();}
-  else if(a==='novo'){modal('<h2>Criar</h2><div class="menu-grade">'+[['novo-pedido','Pedido','pedidos','#0B7A88'],['novo-orcamento','Orçamento','orc','#1D4E9E'],['novo-produto','Produto','produtos','#B45309'],['nova-compra','Compra','compras','#9D174D']].map(function(x){return '<a class="menu-item" href="#'+x[0]+'" data-acao="fechar"><span class="menu-ic" style="background:'+x[3]+'">'+icone(x[2])+'</span><b>'+x[1]+'</b></a>';}).join('')+'</div><button type="button" class="btn contorno" data-acao="fechar">Fechar</button>');}
+  else if(a==='novo'){modal('<h2>Criar</h2><div class="menu-grade">'+[['novo-pedido','Pedido','pedidos','#0B7A88'],['novo-orcamento','Orçamento','orc','#1D4E9E'],['novo-produto','Produto','produtos','#0369A1'],['nova-compra','Compra','compras','#9D174D']].map(function(x){return '<a class="menu-item" href="#'+x[0]+'" data-acao="fechar"><span class="menu-ic" style="background:'+x[3]+'">'+icone(x[2])+'</span><b>'+x[1]+'</b></a>';}).join('')+'</div><button type="button" class="btn contorno" data-acao="fechar">Fechar</button>');}
   else if(a==='fechar'){fecharModal();}
   else if(a==='atualizar'){fecharModal();executar(async function(){},'Dados atualizados.').then(desenhar);}
   else if(a==='filtrar'){estado.filtroStatus=b.getAttribute('data-status');estado.busca='';ir('pedidos');}
@@ -1457,7 +1458,7 @@ var MENU=[
     {r:'clientes',n:'Clientes',ic:'clientes',cor:'#C2410C',sub:function(){return db.clientes.length+' cadastrados';}}
   ]},
   {grupo:'Produção',itens:[
-    {r:'produtos',n:'Produtos',ic:'produtos',cor:'#B45309',sub:function(){return db.produtos.length+' com ficha';}},
+    {r:'produtos',n:'Produtos',ic:'produtos',cor:'#0369A1',sub:function(){return db.produtos.length+' com ficha';}},
     {r:'estoque',n:'Estoque',ic:'estoque',cor:'#047857',sub:function(){var n=abaixoMinimo().length;return n?n+' abaixo do mínimo':'Tudo em ordem';}},
     {r:'compras',n:'Compras',ic:'compras',cor:'#9D174D',sub:function(){var n=db.compras.filter(function(c){return c.status==='pendente'||c.status==='comprado';}).length;return n?n+' em andamento':'Lista de compras';}}
   ]},
@@ -1722,11 +1723,14 @@ function telaRelatorios(){
   '<section class="card"><h2>Resumo e comparação</h2><div class="tabela"><table style="min-width:560px"><thead><tr><th></th><th class="num">Período</th><th class="num">Período anterior<br><small>'+dataCurta(R.ant[0])+'–'+dataCurta(R.ant[1])+'</small></th><th class="num">Ano passado<br><small>'+dataCurta(R.ano[0])+'/'+R.ano[0].slice(2,4)+'–'+dataCurta(R.ano[1])+'/'+R.ano[1].slice(2,4)+'</small></th></tr></thead><tbody>'+
     linhaComp('Pedidos','qtd',nInt)+linhaComp('Faturamento','fat')+linhaComp('Ticket médio','ticket')+linhaComp('Lucro estimado','lucro')+linhaComp('Entradas no caixa','ent')+linhaComp('Saídas do caixa','sai')+linhaComp('Saldo do caixa','saldo')+
   '</tbody></table></div></section>'+
-  '<div class="dupla"><section class="card larga"><h2>Lucro por produto</h2><div class="tabela"><table style="min-width:520px"><thead><tr><th>Produto</th><th class="num">Qtd.</th><th class="num">Faturamento</th><th class="num">Custo</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead><tbody>'+
+  (function(){var fimR=paraData(ate),pm=porMes(mesesAte(fimR.getFullYear(),fimR.getMonth(),12)),rots=pm.map(function(x){return x.rot;}),noms=pm.map(function(x){return x.nome;});
+    return '<div class="dupla"><section class="card larga"><h2>Vendas e lucro por mês</h2><p class="dica" style="margin:0">12 meses até '+MESES[fimR.getMonth()]+' de '+fimR.getFullYear()+'.</p>'+graficoColunas({titulo:'Vendas e lucro estimado por mês',rotulos:rots,nomes:noms,series:[{nome:'Vendas',cor:COR_S1,valores:pm.map(function(x){return x.fat;})},{nome:'Lucro estimado',cor:COR_S2,valores:pm.map(function(x){return x.lucro;})}]})+'</section>'+
+      '<section class="card larga"><h2>Entradas e saídas do caixa</h2><p class="dica" style="margin:0">O que entrou e saiu de dinheiro em cada mês.</p>'+graficoColunas({titulo:'Entradas e saídas do caixa por mês',rotulos:rots,nomes:noms,series:[{nome:'Entradas',cor:COR_S1,valores:pm.map(function(x){return x.ent;})},{nome:'Saídas',cor:COR_S2,valores:pm.map(function(x){return x.sai;})}]})+'</section></div>';})()+
+  '<div class="dupla"><section class="card larga"><h2>Lucro por produto</h2>'+graficoBarras(prodKs.slice(0,8).map(function(k){var x=R.prods[k];return {rot:k,valor:x.fat-x.custo,extra:'Vendas: '+brl(x.fat)};}))+'<div class="tabela"><table style="min-width:520px"><thead><tr><th>Produto</th><th class="num">Qtd.</th><th class="num">Faturamento</th><th class="num">Custo</th><th class="num">Lucro</th><th class="num">Margem</th></tr></thead><tbody>'+
     (prodKs.length?prodKs.map(function(k){var x=R.prods[k],l=x.fat-x.custo;return '<tr><td>'+esc(k)+'</td><td class="num">'+qtdTxt(x.qtd)+'</td><td class="num">'+brl(x.fat)+'</td><td class="num">'+brl(x.custo)+'</td><td class="num '+(l>=0?'pos':'neg')+'" style="font-weight:600">'+brl(l)+'</td><td class="num">'+(x.fat?pct(l/x.fat*100):'—')+'</td></tr>';}).join(''):'<tr><td colspan="6" class="vazio">Nenhum pedido no período.</td></tr>')+'</tbody></table></div><p class="dica" style="margin:0">Custo pela ficha técnica no momento do pedido, sem taxas e frete.</p></section>'+
-  '<div class="estreita" style="display:flex;flex-direction:column;gap:14px"><section class="card"><h2>Pedidos por canal</h2><div class="valores">'+(Object.keys(R.canais).length?Object.keys(R.canais).map(function(k){return '<div><span>'+esc(k)+' ('+R.canais[k].qtd+')</span><span>'+brl(R.canais[k].fat)+'</span></div>';}).join(''):'<div><span>Nenhum</span></div>')+'</div></section>'+
+  '<div class="estreita" style="display:flex;flex-direction:column;gap:14px"><section class="card"><h2>Vendas por canal</h2>'+graficoBarras(Object.keys(R.canais).sort(function(a,b){return R.canais[b].fat-R.canais[a].fat;}).map(function(k){return {rot:k+' ('+R.canais[k].qtd+')',valor:R.canais[k].fat};}))+'</section>'+
   '<section class="card"><h2>Pedidos por situação</h2><div class="valores">'+(Object.keys(R.sit).length?Object.keys(R.sit).map(function(k){return '<div><span>'+esc(statusInfo(k)[1])+'</span><span>'+R.sit[k]+'</span></div>';}).join(''):'<div><span>Nenhum</span></div>')+'<div class="total"><span>Atrasados agora</span><span class="'+(R.atrasados.length?'neg':'')+'">'+R.atrasados.length+'</span></div></div></section></div></div>'+
-  '<div class="dupla"><section class="card larga"><h2>Despesas por categoria</h2><div class="valores">'+(Object.keys(R.despesas).length?Object.keys(R.despesas).sort(function(a,b){return R.despesas[b]-R.despesas[a];}).map(function(k){return '<div><span>'+esc(k)+'</span><span class="neg">'+brl(R.despesas[k])+'</span></div>';}).join(''):'<div><span>Nenhuma</span></div>')+'</div>'+
+  '<div class="dupla"><section class="card larga"><h2>Despesas por categoria</h2>'+graficoBarras(Object.keys(R.despesas).sort(function(a,b){return R.despesas[b]-R.despesas[a];}).map(function(k){return {rot:k,valor:R.despesas[k]};}),brl,COR_S2)+
     '<h2 style="margin-top:6px">Entradas por categoria</h2><div class="valores">'+(Object.keys(R.entradas).length?Object.keys(R.entradas).map(function(k){return '<div><span>'+esc(k)+'</span><span class="pos">'+brl(R.entradas[k])+'</span></div>';}).join(''):'<div><span>Nenhuma</span></div>')+'</div></section>'+
   '<section class="card estreita"><h2>Estoque agora</h2><div class="valores"><div><span>Valor em estoque</span><b>'+brl(estVal)+'</b></div><div><span>Abaixo do mínimo</span><b class="'+(abaixoMinimo().length?'neg':'')+'">'+abaixoMinimo().length+'</b></div></div></section></div>'+
   '<section class="card"><h2>Materiais consumidos no período</h2><div id="rel-mats"><div class="vazio">Carregando…</div></div></section>';
@@ -1763,7 +1767,7 @@ async function exportarExcel(nomeArq,tabelas){
 async function exportarPdfRelatorio(){
   if(!window.jspdf){aviso('O gerador de PDF não carregou. Confira a internet e tente de novo.');return;}
   var X=tabelasRelatorio(),J=window.jspdf.jsPDF,doc=new J({unit:'mm',format:'a4'}),W=210,M=14,y=0,logo=await carregarLogo();
-  doc.setFillColor(17,19,24);doc.rect(0,0,W,30,'F');doc.setFillColor(242,194,48);doc.rect(0,30,W,1.2,'F');if(logo)doc.addImage(logo,'PNG',M,3,34,24);
+  doc.setFillColor(17,19,24);doc.rect(0,0,W,30,'F');doc.setFillColor(43,179,192);doc.rect(0,30,W,1.2,'F');if(logo)doc.addImage(logo,'PNG',M,3,34,24);
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(16);doc.text('Relatório',W-M,14,{align:'right'});doc.setFont('helvetica','normal');doc.setFontSize(10);doc.text(dataLonga(X.iv[0])+' a '+dataLonga(X.iv[1]),W-M,21,{align:'right'});
   y=40;
   X.T.forEach(function(t){
@@ -1796,6 +1800,76 @@ async function exportarBackup(){
   }catch(e){aviso(msgErro(e));}
   finally{carregandoNao();}
 }
+
+/* =====================================================================
+   Gráficos (SVG próprio, sem biblioteca)
+   ===================================================================== */
+var COR_S1='#0891B2',COR_S2='#7C3AED';
+function compacto(v){var a=Math.abs(v);if(a>=1e6)return (v/1e6).toFixed(1).replace('.',',')+' mi';if(a>=1e4)return Math.round(v/1e3)+' mil';if(a>=1e3)return (v/1e3).toFixed(1).replace('.',',')+' mil';return String(Math.round(v));}
+function passoLimpo(max){if(max<=0)return 1;var bruto=max/4,p=Math.pow(10,Math.floor(Math.log10(bruto))),n=bruto/p;return (n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p;}
+function mesesAte(a,m,n){var out=[];for(var i=n-1;i>=0;i--){var d=new Date(a,m-i,1);out.push([d.getFullYear(),d.getMonth()]);}return out;}
+var MES_CURTO=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function porMes(meses){
+  return meses.map(function(am){
+    var ini=iso(new Date(am[0],am[1],1)),fim=iso(new Date(am[0],am[1]+1,0)),mt=metricas(ini,fim);
+    return {rot:MES_CURTO[am[1]]+(am[1]===0?'/'+String(am[0]).slice(2):''),nome:MESES[am[1]]+' de '+am[0],fat:mt.fat,lucro:mt.lucro,ent:mt.ent,sai:mt.sai,qtd:mt.qtd};
+  });
+}
+/* colunas: series=[{nome,cor,valores}], rotulos=[...], nomes=[...] (para o tooltip) */
+function graficoColunas(o){
+  var W=Math.round(Math.min(640,Math.max(300,(window.innerWidth||640)-(window.innerWidth>=900?330:64)))),H=W<480?200:230,ml=W<480?44:52,mr=10,mt=16,mb=28,pw=W-ml-mr,ph=H-mt-mb,n=o.rotulos.length,ns=o.series.length;
+  var todos=[];o.series.forEach(function(s){todos=todos.concat(s.valores);});
+  var max=Math.max.apply(null,todos.concat([0])),min=Math.min.apply(null,todos.concat([0]));
+  var passo=passoLimpo(Math.max(max,-min,1)),topo=Math.ceil(max/passo)*passo||passo,base=Math.floor(min/passo)*passo;
+  function Y(v){return mt+(topo-v)/(topo-base)*ph;}
+  var banda=pw/n,larg=Math.min(24,(banda*0.7-(ns-1)*2)/ns),grupo=larg*ns+(ns-1)*2;
+  var g='';
+  for(var t=base;t<=topo+1e-9;t+=passo){var y=Y(t);g+='<line x1="'+ml+'" x2="'+(W-mr)+'" y1="'+y+'" y2="'+y+'" stroke="'+(Math.abs(t)<1e-9?'#C7CCD3':'#EEF0F2')+'" stroke-width="1"/><text x="'+(ml-8)+'" y="'+(y+4)+'" text-anchor="end" font-size="11" fill="#5B6270">'+compacto(t)+'</text>';}
+  var barras='',rot='',hits='';
+  for(var i=0;i<n;i++){
+    var x0=ml+banda*i+(banda-grupo)/2,dest=o.destaque===i;
+    o.series.forEach(function(s,k){var v=s.valores[i]||0,x=x0+k*(larg+2),y0=Y(0),y1=Y(v),h=Math.abs(y1-y0),r=Math.min(4,h,larg/2);
+      if(h<0.5)return;
+      var cima=v>=0,ytop=cima?y1:y0;
+      var d=cima?('M'+x+','+y0+'V'+(y1+r)+'Q'+x+','+y1+' '+(x+r)+','+y1+'H'+(x+larg-r)+'Q'+(x+larg)+','+y1+' '+(x+larg)+','+(y1+r)+'V'+y0+'Z')
+                :('M'+x+','+y0+'V'+(y1-r)+'Q'+x+','+y1+' '+(x+r)+','+y1+'H'+(x+larg-r)+'Q'+(x+larg)+','+y1+' '+(x+larg)+','+(y1-r)+'V'+y0+'Z');
+      barras+='<path d="'+d+'" fill="'+s.cor+'"'+(o.destaque!=null&&!dest&&ns===1?' fill-opacity="0.45"':'')+'/>';
+    });
+    if(banda>=34||i%2===(n-1)%2||dest)rot+='<text x="'+(ml+banda*i+banda/2)+'" y="'+(H-8)+'" text-anchor="middle" font-size="11" fill="'+(dest?'#111318':'#5B6270')+'"'+(dest?' font-weight="700"':'')+'>'+esc(o.rotulos[i])+'</text>';
+    var tip=(o.nomes?o.nomes[i]:o.rotulos[i])+'|'+o.series.map(function(s){return s.nome+': '+(o.fmt||brl)(s.valores[i]||0);}).join('|');
+    hits+='<rect x="'+(ml+banda*i)+'" y="'+mt+'" width="'+banda+'" height="'+ph+'" fill="transparent" data-tip="'+esc(tip)+'" tabindex="0"/>';
+  }
+  var rotDest='';
+  if(o.destaque!=null){var vd=o.series[0].valores[o.destaque]||0;rotDest='<text x="'+(ml+banda*o.destaque+banda/2)+'" y="'+(Math.min(Y(vd),Y(0))-6)+'" text-anchor="middle" font-size="11.5" font-weight="700" fill="#111318">'+(o.fmtRot||compacto)(vd)+'</text>';}
+  var leg=ns>1?'<div class="legenda">'+o.series.map(function(s){return '<span><i style="background:'+s.cor+'"></i>'+esc(s.nome)+'</span>';}).join('')+'</div>':'';
+  var tabela='<details class="ver-tabela"><summary>Ver em tabela</summary><div class="tabela"><table style="min-width:0"><thead><tr><th></th>'+o.series.map(function(s){return '<th class="num">'+esc(s.nome)+'</th>';}).join('')+'</tr></thead><tbody>'+
+    o.rotulos.map(function(r,i){return '<tr><td>'+esc(o.nomes?o.nomes[i]:r)+'</td>'+o.series.map(function(s){return '<td class="num">'+(o.fmt||brl)(s.valores[i]||0)+'</td>';}).join('')+'</tr>';}).join('')+'</tbody></table></div></details>';
+  return leg+'<svg class="grafico" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(o.titulo||'Gráfico')+'">'+g+barras+rotDest+rot+hits+'</svg>'+tabela;
+}
+/* barras horizontais: itens=[{rot,valor}] */
+function graficoBarras(itens,fmt,cor){
+  fmt=fmt||brl;cor=cor||COR_S1;
+  if(!itens.length)return '<div class="vazio">Nada no período.</div>';
+  var max=Math.max.apply(null,itens.map(function(i){return Math.abs(i.valor);}).concat([0]))||1;
+  return '<div class="hbarras">'+itens.map(function(i){var w=Math.max(1,Math.abs(i.valor)/max*100);
+    return '<div class="hbarra" data-tip="'+esc(i.rot+'|'+fmt(i.valor)+(i.extra?'|'+i.extra:''))+'" tabindex="0"><span class="hb-rot">'+esc(i.rot)+'</span><span class="hb-trilho"><span class="hb-barra" style="width:'+w+'%;background:'+(i.valor<0?'#B91C1C':cor)+'"></span></span><span class="hb-val">'+fmt(i.valor)+'</span></div>';}).join('')+'</div>';
+}
+/* dica flutuante (passar o mouse ou tocar) */
+var dica=null;
+function mostrarDica(el,x,y){
+  if(!dica){dica=document.createElement('div');dica.className='dica-grafico';dica.setAttribute('role','tooltip');document.body.appendChild(dica);}
+  var p=String(el.getAttribute('data-tip')).split('|');
+  dica.innerHTML='<b>'+esc(p[0])+'</b>'+p.slice(1).map(function(l){return '<span>'+esc(l)+'</span>';}).join('');
+  dica.style.display='block';
+  var w=dica.offsetWidth,h=dica.offsetHeight,vx=Math.min(Math.max(8,x-w/2),window.innerWidth-w-8),vy=y-h-14<8?y+18:y-h-14;
+  dica.style.left=vx+'px';dica.style.top=vy+'px';
+}
+function esconderDica(){if(dica)dica.style.display='none';}
+document.addEventListener('pointerover',function(e){var el=e.target.closest&&e.target.closest('[data-tip]');if(el&&e.pointerType==='mouse')mostrarDica(el,e.clientX,e.clientY);});
+document.addEventListener('pointermove',function(e){var el=e.target.closest&&e.target.closest('[data-tip]');if(el&&e.pointerType==='mouse')mostrarDica(el,e.clientX,e.clientY);else if(e.pointerType==='mouse')esconderDica();});
+document.addEventListener('pointerdown',function(e){var el=e.target.closest&&e.target.closest('[data-tip]');if(el&&e.pointerType!=='mouse'){mostrarDica(el,e.clientX,e.clientY);}else if(!el)esconderDica();});
+document.addEventListener('focusin',function(e){var el=e.target.closest&&e.target.closest('[data-tip]');if(el){var r=el.getBoundingClientRect();mostrarDica(el,r.left+r.width/2,r.top);}});
+document.addEventListener('scroll',esconderDica,true);
 
 /* atualiza ao voltar para o app (a outra pessoa pode ter mudado algo) */
 document.addEventListener('visibilitychange',function(){
