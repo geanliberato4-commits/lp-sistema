@@ -84,7 +84,7 @@ var CFG=window.LP_CONFIG||{};
 var configurado=CFG.url&&CFG.url.indexOf('http')===0&&CFG.chave&&CFG.chave.indexOf('COLE_AQUI')<0;
 var sb=configurado&&window.supabase?window.supabase.createClient(CFG.url,CFG.chave):null;
 
-var db={pedidos:[],caixa:[],materiais:[],clientes:[],usos:[],produtos:[],orcamentos:[],compras:[],contas:[],anexos:[],cfg:{meta:0,shopeePct:0,shopeeFixo:0,shopeeFixoPor:'pedido',outrasPct:0,statusBaixa:'em_producao'}};
+var db={pedidos:[],caixa:[],materiais:[],clientes:[],usos:[],produtos:[],orcamentos:[],compras:[],contas:[],anexos:[],cfg:{faixas:[],adicional:0,meta:0,shopeePct:0,shopeeFixo:0,shopeeFixoPor:'pedido',outrasPct:0,statusBaixa:'em_producao'}};
 var usuario=null;
 var ocupado=false;
 
@@ -148,7 +148,7 @@ async function recarregar(){
   db.materiais=checar(res[2]).map(function(m){return {id:m.id,nome:m.nome,descricao:m.descricao||'',unidade:m.unidade,qtd:num(m.quantidade),minimo:num(m.minimo),custo:num(m.custo_unitario),fornecedor:m.fornecedor||'',ultimaCompra:m.ultima_compra,categoria:m.categoria||'',embalagem:m.embalagem||'',unidEmb:num(m.unidades_embalagem),valorEmb:m.valor_embalagem==null?null:num(m.valor_embalagem)};});
   db.clientes=checar(res[3]);
   var c=checar(res[4])||{};
-  db.cfg={meta:num(c.meta_mensal),shopeePct:num(c.shopee_percentual),shopeeFixo:num(c.shopee_fixo),shopeeFixoPor:c.shopee_fixo_por||'pedido',outrasPct:num(c.outras_despesas_percentual),statusBaixa:c.status_baixa||'em_producao'};
+  db.cfg={faixas:(Array.isArray(c.shopee_faixas)&&c.shopee_faixas.length?c.shopee_faixas:FAIXAS_SHOPEE).map(function(x){return {ate:x.ate==null?null:num(x.ate),pct:num(x.pct),fixo:num(x.fixo)};}),adicional:num(c.shopee_adicional_item),meta:num(c.meta_mensal),shopeePct:num(c.shopee_percentual),shopeeFixo:num(c.shopee_fixo),shopeeFixoPor:c.shopee_fixo_por||'pedido',outrasPct:num(c.outras_despesas_percentual),statusBaixa:c.status_baixa||'em_producao'};
   db.usos=checar(res[5]).map(function(u){return {id:u.id,materialId:u.material_id,pedidoId:u.pedido_id,tipo:u.tipo,origem:u.origem||'manual',qtd:num(u.quantidade),custo:num(u.custo_unitario),data:iso(new Date(u.criado_em))};});
   db.produtos=checar(res[6]).map(mapProduto);
   db.orcamentos=checar(res[7]).map(mapOrcamento);
@@ -188,19 +188,29 @@ function custoMatProduto(pr){var s=0;(pr.insumos||[]).forEach(function(i){var m=
 function custoProduto(pr){return custoMatProduto(pr)+pr.maoObra+pr.embalagem+pr.outros;}
 function custoInsumos(lista){var s=0;(lista||[]).forEach(function(i){var m=acharMaterial(i.material_id||i.materialId);if(m)s+=num(i.quantidade!=null?i.quantidade:i.qtd)*m.custo;});return s;}
 
-/* taxas da Shopee para um valor de venda (qtdItens para a tarifa por item) */
-function taxasCanal(canal,valor,qtdItens){
+/* taxas da Shopee por faixa de preço do item (tabela em Ajustes) */
+var FAIXAS_SHOPEE=[{ate:79.99,pct:20,fixo:4.5},{ate:99.99,pct:14,fixo:16},{ate:199.99,pct:14,fixo:20},{ate:null,pct:14,fixo:26}];
+var TABELA_SHOPEE_DATA='01/10/2026',TABELA_SHOPEE_CONFERIDA='15/11/2026';
+function faixasShopee(){return (db.cfg.faixas&&db.cfg.faixas.length?db.cfg.faixas:FAIXAS_SHOPEE).slice().sort(function(a,b){return (a.ate==null?1e12:a.ate)-(b.ate==null?1e12:b.ate);});}
+function faixaDoPreco(preco){var fs=faixasShopee();for(var i=0;i<fs.length;i++){if(fs[i].ate==null||preco<=fs[i].ate+1e-9)return {f:fs[i],i:i,de:i?fs[i-1].ate+0.01:0};}return {f:fs[fs.length-1],i:fs.length-1,de:0};}
+function textoFaixa(fx){return (fx.i===0?'até '+brl(fx.f.ate):fx.f.ate==null?'acima de '+brl(fx.de-0.01):brl(fx.de)+' a '+brl(fx.f.ate))+': '+pct(fx.f.pct)+' + '+brl(fx.f.fixo)+' por item';}
+function taxaShopeeItem(preco){var fx=faixaDoPreco(preco),com=preco*fx.f.pct/100;return {faixa:fx,comissao:com,fixo:fx.f.fixo,adicional:db.cfg.adicional||0,total:com+fx.f.fixo+(db.cfg.adicional||0)};}
+/* itens = [{preco, qtd}] */
+function taxasCanal(canal,itens){
   if(canal!=='Shopee')return {taxa:0,outras:0,total:0};
-  var c=db.cfg,t=valor*c.shopeePct/100+c.shopeeFixo*(c.shopeeFixoPor==='item'?Math.max(1,qtdItens||1):1),o=valor*c.outrasPct/100;
+  var t=0,v=0;(itens||[]).forEach(function(i){var q=num(i.qtd),pr=num(i.preco);if(q<=0)return;t+=taxaShopeeItem(pr).total*q;v+=pr*q;});
+  var o=v*(db.cfg.outrasPct||0)/100;
   return {taxa:r2(t),outras:r2(o),total:r2(t+o)};
 }
 function analisePreco(custo,preco,canal){
-  var tx=taxasCanal(canal,preco,1),lucro=preco-custo-tx.total;
+  var tx=taxasCanal(canal,[{preco:preco,qtd:1}]),lucro=preco-custo-tx.total;
   return {preco:preco,custo:custo,taxa:tx.taxa,outras:tx.outras,lucro:lucro,efetivo:preco>0?lucro/preco*100:0,sobreCusto:custo>0?lucro/custo*100:0};
 }
 function precoParaLucro(custo,lucro,canal){
-  var c=db.cfg,p=canal==='Shopee'?(c.shopeePct+c.outrasPct)/100:0,f=canal==='Shopee'?c.shopeeFixo:0;
-  if(p>=1)return 0;return r2((custo+f+lucro)/(1-p));
+  if(canal!=='Shopee')return r2(custo+lucro);
+  var fs=faixasShopee(),melhor=null,out=(db.cfg.outrasPct||0)/100,add=db.cfg.adicional||0;
+  fs.forEach(function(f,i){var de=i?fs[i-1].ate+0.01:0,ate=f.ate,den=1-f.pct/100-out;if(den<=0)return;var pr=(custo+f.fixo+add+lucro)/den;if(pr<de)pr=de;if(ate!=null&&pr>ate+1e-9)return;pr=Math.ceil(pr*100)/100;if(melhor===null||pr<melhor)melhor=pr;});
+  return melhor||0;
 }
 
 /* materiais necessários de uma lista de itens {insumos, qtd} */
@@ -257,6 +267,7 @@ function desenhar(){
   if(r==='novo-produto'||/^produto-/.test(r))atualizarFormProduto();
   if(/^pedido-/.test(r))carregarMiniaturas();
   if(r==='relatorios')desenharConsumo();
+  if(r==='ajustes')simularShopee();
   if(/compra$|compra-sugerida$|^editar-compra-/.test(r))atualizarFormCompra();
 }
 
@@ -520,7 +531,7 @@ function atualizarFormPedido(){
   });
   var total=sub+num(f.frete.value)-num(f.desconto.value);
   document.getElementById('np-total').textContent='Total do pedido: '+brl(total);
-  var tx=taxasCanal(f.origem.value,total,qtdT),campo=f.taxa;
+  var tx=taxasCanal(f.origem.value,itens.map(function(i){return {preco:i.valor,qtd:i.qtd};})),campo=f.taxa;
   if(!campo.getAttribute('data-manual'))campo.value=tx.total?tx.total.toFixed(2):'0';
   document.getElementById('np-taxa-dica').textContent=f.origem.value==='Shopee'?('Estimativa pelas taxas em Ajustes: '+brl(tx.total)+'. Pode corrigir à mão.'):'Taxas da Shopee só se aplicam ao canal Shopee.';
   var lucro=total-custoEst-num(campo.value)-num(f.custo.value);
@@ -683,9 +694,11 @@ function atualizarFormProduto(){
     var preco=r2(custo*(1+pc/100)),a=analisePreco(custo,preco,canal);
     return '<tr><td>'+pc+'%'+(pc===acr&&SUGESTOES.indexOf(acr)<0?' (seu)':'')+'</td><td class="num"><b>'+brl(preco)+'</b></td><td class="num">'+brl(preco-custo)+'</td>'+(canal==='Shopee'?'<td class="num">− '+brl(a.taxa+a.outras)+'</td>':'')+'<td class="num '+(a.lucro>=0?'pos':'neg')+'"><b>'+brl(a.lucro)+'</b></td><td class="num">'+pct(a.efetivo)+'</td><td class="num"><button type="button" class="btn contorno peq" data-acao="usar-preco" data-preco="'+preco+'" data-pc="'+pc+'">Usar</button></td></tr>';
   }).join('');
-  document.getElementById('pf-sug').innerHTML='<div class="tabela"><table style="min-width:520px"><thead><tr><th>Acréscimo</th><th class="num">Preço sugerido</th><th class="num">Lucro bruto</th>'+(canal==='Shopee'?'<th class="num">Taxas e despesas</th>':'')+'<th class="num">Lucro líquido</th><th class="num">% efetivo</th><th><span class="sr">Usar</span></th></tr></thead><tbody>'+linhas+'</tbody></table></div><p class="dica" style="margin:0">Preço = custo × (1 + acréscimo ÷ 100). O acréscimo é sobre o custo; o % efetivo é o lucro líquido dividido pelo preço.'+(canal==='Shopee'?' Taxas da Shopee conforme Ajustes ('+pct(db.cfg.shopeePct)+' + '+brl(db.cfg.shopeeFixo)+' por '+(db.cfg.shopeeFixoPor==='item'?'item':'pedido')+(db.cfg.outrasPct?' + '+pct(db.cfg.outrasPct)+' de outras despesas':'')+').':'')+'</p>';
-  var preco=num(f.preco.value),a=analisePreco(custo,preco,canal);
-  document.getElementById('pf-res').innerHTML=preco>0?'<div class="valores"><div><span>Venda</span><span>'+brl(preco)+'</span></div><div><span>Custo de fabricação</span><span>− '+brl(custo)+'</span></div>'+(canal==='Shopee'?'<div><span>Taxas Shopee</span><span>− '+brl(a.taxa)+'</span></div><div><span>Outras despesas</span><span>− '+brl(a.outras)+'</span></div>':'')+'<div class="total"><span>Lucro líquido estimado</span><span class="'+(a.lucro>=0?'pos':'neg')+'">'+brl(a.lucro)+' ('+pct(a.efetivo)+' do preço)</span></div></div>':'';
+  document.getElementById('pf-sug').innerHTML='<div class="tabela"><table style="min-width:520px"><thead><tr><th>Acréscimo</th><th class="num">Preço sugerido</th><th class="num">Lucro bruto</th>'+(canal==='Shopee'?'<th class="num">Taxas e despesas</th>':'')+'<th class="num">Lucro líquido</th><th class="num">% efetivo</th><th><span class="sr">Usar</span></th></tr></thead><tbody>'+linhas+'</tbody></table></div><p class="dica" style="margin:0">Preço = custo × (1 + acréscimo ÷ 100). O acréscimo é sobre o custo; o % efetivo é o lucro líquido dividido pelo preço.'+(canal==='Shopee'?' Taxas da Shopee pela faixa de preço de cada sugestão (tabela em Ajustes).':'')+'</p>';
+  var preco=num(f.preco.value),a=analisePreco(custo,preco,canal),zona='';
+  if(canal==='Shopee'&&preco>0){var fx=faixaDoPreco(preco);zona='<p class="dica" style="margin:0">Faixa da Shopee: <b>'+esc(textoFaixa(fx))+'</b>'+(db.cfg.adicional?' + '+brl(db.cfg.adicional)+' de adicional':'')+'.</p>';
+    if(fx.i>0){var pa=faixasShopee()[fx.i-1].ate,aa=analisePreco(custo,pa,canal);if(aa.lucro>a.lucro)zona+='<div class="aviso-demo" style="background:var(--ouro-cl);color:var(--ouro-esc)">Atenção: vendendo a <b>'+brl(pa)+'</b> você lucra <b>'+brl(aa.lucro)+'</b>, mais do que a '+brl(preco)+' ('+brl(a.lucro)+'), porque muda a faixa de taxa da Shopee. Para valer a pena, cobre pelo menos <b>'+brl(precoParaLucro(custo,aa.lucro,canal))+'</b>.</div>';}}
+  document.getElementById('pf-res').innerHTML=preco>0?'<div class="valores"><div><span>Venda</span><span>'+brl(preco)+'</span></div><div><span>Custo de fabricação</span><span>− '+brl(custo)+'</span></div>'+(canal==='Shopee'?'<div><span>Taxas Shopee</span><span>− '+brl(a.taxa)+'</span></div><div><span>Outras despesas</span><span>− '+brl(a.outras)+'</span></div>':'')+'<div class="total"><span>Lucro líquido estimado</span><span class="'+(a.lucro>=0?'pos':'neg')+'">'+brl(a.lucro)+' ('+pct(a.efetivo)+' do preço)</span></div></div>'+zona:'';
   var ld=f.lucroDesejado.value,lp=f.lucroPct.value,inv='';
   if(ld!==''||lp!==''){var alvo=ld!==''?num(ld):custo*num(lp)/100,pr=precoParaLucro(custo,alvo,canal);inv='<div class="valores"><div class="total"><span>Preço necessário'+(canal==='Shopee'?' (já com taxas)':'')+'</span><span>'+brl(pr)+'</span></div><div><span>Lucro após taxas</span><span>'+brl(alvo)+'</span></div></div><button type="button" class="btn contorno peq" data-acao="usar-preco" data-preco="'+pr+'">Usar este preço</button>';}
   document.getElementById('pf-inv').innerHTML=inv;
@@ -803,7 +816,7 @@ function atualizarFormOrc(origem){
     sub+=i.qtd*i.preco;custoT+=i.qtd*i.custo;qtdT+=i.qtd;
     i.el.querySelector('.info-item').textContent=i.preco>0?('Subtotal '+brl(i.qtd*i.preco)+(i.custo>0?' · lucro de '+pct((i.preco-i.custo)/i.custo*100)+' sobre o custo':'')):'';
   });
-  var total=sub-num(f.desconto.value)+num(f.frete.value),tx=taxasCanal(f.canal.value,total,qtdT),lucro=total-custoT-tx.total-num(f.frete.value);
+  var total=sub-num(f.desconto.value)+num(f.frete.value),tx=taxasCanal(f.canal.value,itens.map(function(i){return {preco:i.preco,qtd:i.qtd};})),lucro=total-custoT-tx.total-num(f.frete.value);
   document.getElementById('oc-tot').innerHTML='<div class="valores"><div><span>Subtotal</span><span>'+brl(sub)+'</span></div>'+(num(f.desconto.value)?'<div><span>Desconto</span><span>− '+brl(f.desconto.value)+'</span></div>':'')+(num(f.frete.value)?'<div><span>Frete</span><span>'+brl(f.frete.value)+'</span></div>':'')+'<div class="total"><span>Total para o cliente</span><span>'+brl(total)+'</span></div></div>';
   document.getElementById('oc-int').innerHTML='<div class="valores"><div><span>Custo interno</span><span>'+brl(custoT)+'</span></div>'+(f.canal.value==='Shopee'?'<div><span>Taxas e despesas Shopee</span><span>− '+brl(tx.total)+'</span></div>':'')+'<div class="total" style="border-color:var(--linha-esc)"><span>Lucro estimado</span><span class="'+(lucro>=0?'pos':'neg')+'">'+brl(lucro)+(total>0?' ('+pct(lucro/total*100)+')':'')+'</span></div></div><p class="dica" style="margin:0;color:var(--prata)">Nada desta parte aparece no PDF nem na mensagem para o cliente.</p>';
 }
@@ -820,7 +833,7 @@ async function salvarOrcForm(f){
 }
 function telaOrcamento(o){
   var sub=0,custoT=0,qtdT=0;o.itens.forEach(function(i){sub+=i.qtd*i.preco;custoT+=i.qtd*i.custo;qtdT+=i.qtd;});
-  var total=totalOrc(o),tx=taxasCanal(o.canal,total,qtdT),lucro=total-custoT-tx.total-o.frete,ped=o.pedidoId?acharPedidoId(o.pedidoId):null;
+  var total=totalOrc(o),tx=taxasCanal(o.canal,o.itens.map(function(i){return {preco:i.preco,qtd:i.qtd};})),lucro=total-custoT-tx.total-o.frete,ped=o.pedidoId?acharPedidoId(o.pedidoId):null;
   var nec=necessidades(o.itens.map(function(i){var pr=i.produtoId?acharProduto(i.produtoId):null;return {qtd:i.qtd,insumos:pr?pr.insumos.map(function(x){return {material_id:x.materialId,quantidade:x.qtd};}):i.insumos};}));
   return '<div class="cab"><div style="display:flex;align-items:center;gap:10px"><a href="#orcamentos" class="btn contorno peq" aria-label="Voltar para orçamentos">'+icone('voltar')+'</a><div><h1>Orçamento '+numPedido(o.num)+'</h1><p>'+dataLonga(o.data)+(o.validade?' · válido até '+dataLonga(o.validade):'')+' · '+esc(o.canal)+'</p></div></div><div class="acoes">'+chipOrc(o)+'</div></div>'+
   '<div class="acoes"><button type="button" class="btn" data-acao="orc-copiar" data-num="'+o.num+'">'+icone('copiar')+'Copiar para WhatsApp</button><button type="button" class="btn ouro" data-acao="orc-pdf" data-num="'+o.num+'">'+icone('pdf')+'Gerar PDF</button>'+
@@ -1071,15 +1084,33 @@ async function mostrarHistoricoMat(m){
 /* =====================================================================
    Ajustes
    ===================================================================== */
+function blocoShopee(c){
+  var fs=faixasShopee();
+  return '<div class="linha-tit"><h2>Taxas da Shopee</h2><span class="chip teal">tabela de '+TABELA_SHOPEE_DATA+'</span></div>'+
+    '<p class="dica" style="margin:0">A Shopee cobra por item vendido: uma porcentagem do preço do item mais uma taxa fixa, que mudam conforme a faixa de preço. A comissão não incide sobre o frete. Tabela conferida em '+TABELA_SHOPEE_CONFERIDA+'; se a Shopee mudar, é só corrigir aqui.</p>'+
+    '<div class="tab-faixas"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Preço do item</th><th class="num">Comissão %</th><th class="num">Fixo R$</th></tr></thead><tbody>'+
+    fs.map(function(f,i){var de=i?fs[i-1].ate+0.01:0;return '<tr><td>'+(i===0?'até':f.ate==null?'acima de':'de '+brl(de)+' até')+(f.ate!=null?' <input class="in-faixa" name="ate'+i+'" type="number" step="0.01" min="0" value="'+f.ate+'" aria-label="Preço máximo da faixa '+(i+1)+'">':' '+brl(de-0.01))+'</td><td class="num"><input class="in-faixa" name="pct'+i+'" type="number" step="0.01" min="0" max="99" value="'+f.pct+'" aria-label="Comissão da faixa '+(i+1)+'"></td><td class="num"><input class="in-faixa" name="fixo'+i+'" type="number" step="0.01" min="0" value="'+f.fixo+'" aria-label="Taxa fixa da faixa '+(i+1)+'"></td></tr>';}).join('')+
+    '</tbody></table></div><input type="hidden" name="nfaixas" value="'+fs.length+'">'+
+    '<div class="campos"><div class="campo"><label for="aj-ad">Adicional por item (CPF com mais de 450 pedidos em 90 dias)</label><select id="aj-ad" name="adicional">'+opcoes([['0','Não (CNPJ ou CPF até 450 pedidos)'],['3','R$ 3,00 (CPF com +450 pedidos)']],String(c.adicional||0))+'</select></div>'+
+    '<div class="campo"><label for="aj-o">Outras despesas na Shopee (% da venda)</label><input id="aj-o" name="outras" type="number" min="0" max="99" step="0.01" value="'+(c.outrasPct||0)+'"></div></div>'+
+    '<p class="dica" style="margin:0">Use “outras despesas” para cupons, anúncios ou impostos que vocês queiram descontar de toda venda na Shopee. Deixe 0 se não quiser.</p>'+
+    '<div class="simulador"><div class="campo"><label for="aj-sim">Simular: preço de um item na Shopee (R$)</label><input id="aj-sim" name="simular" type="number" min="0" step="0.01" placeholder="Ex.: 50" value="50"></div><div id="aj-sim-res"></div></div>'+
+    '<button type="button" class="btn contorno peq" data-acao="tabela-oficial">Voltar para a tabela oficial</button>';
+}
+function simularShopee(){
+  var f=document.querySelector('[data-form="ajustes"]');if(!f)return;var el=document.getElementById('aj-sim-res'),p=num(f.simular.value);
+  if(p<=0){el.innerHTML='';return;}
+  var bk=db.cfg;db.cfg=Object.assign({},bk,lerFaixasForm(f));var t=taxaShopeeItem(p),o=p*(db.cfg.outrasPct||0)/100;db.cfg=bk;
+  el.innerHTML='<div class="valores"><div><span>Faixa</span><span>'+esc(textoFaixa(t.faixa))+'</span></div><div><span>Comissão ('+pct(t.faixa.f.pct)+')</span><span>− '+brl(t.comissao)+'</span></div><div><span>Taxa fixa</span><span>− '+brl(t.fixo)+'</span></div>'+(t.adicional?'<div><span>Adicional CPF</span><span>− '+brl(t.adicional)+'</span></div>':'')+(o?'<div><span>Outras despesas</span><span>− '+brl(o)+'</span></div>':'')+'<div class="total"><span>A Shopee fica com</span><span class="neg">'+brl(t.total+o)+' ('+pct((t.total+o)/p*100)+')</span></div><div><span>Você recebe</span><b class="pos">'+brl(p-t.total-o)+'</b></div></div>';
+}
+function lerFaixasForm(f){
+  var n=+f.nfaixas.value,fs=[];for(var i=0;i<n;i++){var a=f['ate'+i];fs.push({ate:a?num(a.value):null,pct:num(f['pct'+i].value),fixo:num(f['fixo'+i].value)});}
+  return {faixas:fs,adicional:num(f.adicional.value),outrasPct:num(f.outras.value)};
+}
 function telaAjustes(){
   var c=db.cfg;
   return '<div class="cab"><div><h1>Ajustes</h1><p>Taxas da Shopee, etapa da baixa do estoque e meta do mês.</p></div></div>'+
-  '<form class="card" data-form="ajustes" style="max-width:720px"><h2>Taxas da Shopee</h2><p class="dica" style="margin:0">Informe as taxas que a Shopee cobra hoje da LP. Elas só entram em pedidos, orçamentos e preços do canal Shopee.</p><div class="campos">'+
-    '<div class="campo"><label for="aj-p">Comissão e taxas (% sobre a venda)</label><input id="aj-p" name="pct" type="number" min="0" max="99" step="0.01" value="'+c.shopeePct+'"></div>'+
-    '<div class="campo"><label for="aj-f">Tarifa fixa (R$)</label><input id="aj-f" name="fixo" type="number" min="0" step="0.01" value="'+c.shopeeFixo+'"></div>'+
-    '<div class="campo"><label for="aj-fp">A tarifa fixa é cobrada por</label><select id="aj-fp" name="fixoPor">'+opcoes([['pedido','Pedido'],['item','Item vendido']],c.shopeeFixoPor)+'</select></div>'+
-    '<div class="campo"><label for="aj-o">Outras despesas na Shopee (% da venda)</label><input id="aj-o" name="outras" type="number" min="0" max="99" step="0.01" value="'+c.outrasPct+'"></div>'+
-  '</div><p class="dica" style="margin:0">Use “outras despesas” para frete subsidiado, cupons pagos pela loja etc.</p>'+
+  '<form class="card" data-form="ajustes" style="max-width:720px">'+blocoShopee(c)+
   '<h2 style="margin-top:8px">Baixa do estoque</h2><div class="campo"><label for="aj-b">Os materiais da ficha saem do estoque quando o pedido chega em</label><select id="aj-b" name="baixa">'+opcoes(STATUS.filter(function(s){return ORDEM_STATUS[s[0]]>=1;}).map(function(s){return [s[0],s[1]];}),c.statusBaixa)+'</select></div>'+
   '<h2 style="margin-top:8px">Meta de vendas</h2><div class="campo"><label for="aj-m">Meta do mês (R$)</label><input id="aj-m" name="meta" type="number" min="0" step="0.01" value="'+(c.meta||'')+'"></div>'+
   '<button class="btn" type="submit">Salvar ajustes</button></form>'+
@@ -1129,7 +1160,7 @@ document.addEventListener('click',function(e){
   /* pedido: detalhe */
   else if(a==='receber'){p=acharPedido(b.getAttribute('data-num'));var s=saldoPedido(p);
     modal('<h2>Registrar recebimento</h2><p style="margin:0;color:var(--sec)">Pedido '+numPedido(p.num)+' · saldo de '+brl(s)+'</p><form data-form="receber" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="rc-v">Valor recebido (R$)</label><input id="rc-v" name="valor" type="number" min="0.01" max="'+s+'" step="0.01" required value="'+s+'"></div><div class="campo"><label for="rc-f">Forma</label><select id="rc-f" name="forma">'+opcoes(FORMAS,p.origem==='Shopee'?'Repasse Shopee':'Pix')+'</select></div><div class="campo"><label for="rc-d">Data</label><input id="rc-d" name="data" type="date" required value="'+hoje()+'"></div>'+botoesForm('Lançar no caixa')+'</form>');}
-  else if(a==='custos'){p=acharPedido(b.getAttribute('data-num'));var txs=taxasCanal(p.origem,totalPedido(p),p.itens.reduce(function(s,i){return s+i.qtd;},0));
+  else if(a==='custos'){p=acharPedido(b.getAttribute('data-num'));var txs=taxasCanal(p.origem,p.itens.map(function(i){return {preco:i.valor,qtd:i.qtd};}));
     modal('<h2>Custos e taxas do pedido</h2><form data-form="custos" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="cu-c">Outros custos do pedido (R$)</label><input id="cu-c" name="custo" type="number" min="0" step="0.01" value="'+num(p.custo)+'"></div><div class="campo"><label for="cu-t">Taxas e despesas da Shopee (R$)</label><input id="cu-t" name="taxa" type="number" min="0" step="0.01" value="'+num(p.taxa)+'"></div>'+(p.origem==='Shopee'?'<p class="dica" style="margin:0">Estimativa pelas taxas em Ajustes: '+brl(txs.total)+'.</p>':'')+botoesForm('Salvar')+'</form>');}
   else if(a==='envio'){p=acharPedido(b.getAttribute('data-num'));
     modal('<h2>Dados de envio</h2><form data-form="envio" data-num="'+p.num+'" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="ev-t">Transportadora</label><input id="ev-t" name="transportadora" value="'+esc(p.transportadora)+'"></div><div class="campo"><label for="ev-r">Código de rastreio</label><input id="ev-r" name="rastreio" value="'+esc(p.rastreio)+'"></div>'+botoesForm('Salvar')+'</form>');}
@@ -1247,6 +1278,7 @@ document.addEventListener('click',function(e){
   else if(a==='rel-pdf'){exportarPdfRelatorio().catch(function(e){aviso(msgErro(e));});}
   else if(a==='rel-excel'){var X=tabelasRelatorio();exportarExcel('Relatorio-LP-'+X.iv[0]+'-a-'+X.iv[1]+'.xlsx',X.T).catch(function(e){aviso(msgErro(e));});}
   else if(a==='backup'){exportarBackup();}
+  else if(a==='tabela-oficial'){var fa=document.querySelector('[data-form="ajustes"]');FAIXAS_SHOPEE.forEach(function(x,i){if(fa['ate'+i])fa['ate'+i].value=x.ate;fa['pct'+i].value=x.pct;fa['fixo'+i].value=x.fixo;});simularShopee();aviso('Tabela oficial preenchida. Toque em Salvar ajustes para guardar.');}
   else if(a==='esqueci'){modal('<h2>Esqueci minha senha</h2><form data-form="esqueci" style="display:flex;flex-direction:column;gap:12px"><div class="campo"><label for="es-e">E-mail do login</label><input id="es-e" name="email" type="email" required autocomplete="username"></div><p class="dica" style="margin:0">Vamos enviar um link para criar uma senha nova.</p>'+botoesForm('Enviar link')+'</form>');}
   /* estoque */
   else if(a==='mov'){var mt=acharMaterial(b.getAttribute('data-id')),t=b.getAttribute('data-t'),pac=t==='entrada'&&mt.unidEmb>0;
@@ -1351,6 +1383,7 @@ document.addEventListener('input',function(e){
   if(t.closest&&t.closest('[data-form="pedido"]')){if(t.name==='taxa')t.setAttribute('data-manual','1');atualizarFormPedido();}
   if(t.closest&&t.closest('[data-form="mat"]'))atualizarPreviaMat();
   if(t.closest&&t.closest('[data-form="mov"]'))previaMov();
+  if(t.closest&&t.closest('[data-form="ajustes"]'))simularShopee();
   if(t.closest&&t.closest('[data-form="uso"]'))atualizarPreviaUso();
   if(t.closest&&t.closest('[data-form="produto"]')){
     if(t.name==='acrescimo'){var f=t.form,cu=custoProduto(Object.assign({},lerProdutoForm(f),{insumos:lerProdutoForm(f).insumos}));if(t.value!=='')f.preco.value=r2(cu*(1+num(t.value)/100)).toFixed(2);}
@@ -1460,7 +1493,7 @@ document.addEventListener('submit',function(e){
     executar(async function(){checar(await sb.from('pedido_anexos').update({aprovado_em:new Date().toISOString(),aprovado_obs:f.obs.value.trim(),aprovado_por:usuario.nome}).eq('id',ida));},'Aprovação registrada.').then(fim);
   }
   else if(t==='ajustes'){
-    executar(async function(){checar(await sb.from('configuracoes').update({shopee_percentual:num(f.pct.value),shopee_fixo:num(f.fixo.value),shopee_fixo_por:f.fixoPor.value,outras_despesas_percentual:num(f.outras.value),status_baixa:f.baixa.value,meta_mensal:num(f.meta.value)}).eq('id',1));},'Ajustes salvos.').then(function(ok){if(ok)desenhar();});
+    executar(async function(){var lf=lerFaixasForm(f);for(var z=1;z<lf.faixas.length;z++){if(lf.faixas[z].ate!=null&&lf.faixas[z].ate<=lf.faixas[z-1].ate)throw new Error('Os preços das faixas precisam ir aumentando.');}var base={outras_despesas_percentual:lf.outrasPct,status_baixa:f.baixa.value,meta_mensal:num(f.meta.value)},rs=await sb.from('configuracoes').update(Object.assign({shopee_faixas:lf.faixas,shopee_adicional_item:lf.adicional},base)).eq('id',1);if(rs.error&&/shopee_faixas|shopee_adicional|column/i.test(rs.error.message||'')){checar(await sb.from('configuracoes').update(base).eq('id',1));aviso('Ajustes salvos. A tabela da Shopee está com os valores oficiais; para guardar mudanças nela, falta rodar o arquivo 10_taxas_shopee_faixas.sql no Supabase.');}else checar(rs);},'Ajustes salvos.').then(function(ok){if(ok)desenhar();});
   }
   else if(t==='lanc'){
     var tipo=estado.tipoNovo,dt=f.data.value;
